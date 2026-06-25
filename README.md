@@ -43,7 +43,8 @@ Data, weights, and `runs/` live outside git (see `.gitignore`); paths in `config
 python scripts/extract_data.py
 python scripts/build_manifest.py
 python scripts/eda.py
-python scripts/make_val_split.py --per-class 12      # then hand-label eval/labels/
+python scripts/make_val_split.py --per-class 12      # generate 72 eval frames
+python scripts/label_eval.py                         # draw boxes -> eval/labels/ (built-in cv2 labeler)
 
 # GPU box (Vast.ai): bash vast/setup.sh ; stage data ; then
 python scripts/pseudo_label_sam.py --ckpt checkpoints/sam_vit_h_4b8939.pth
