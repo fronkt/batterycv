@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 import cv2
+import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -37,19 +38,13 @@ def main() -> None:
 
     picks = []
     for label, g in df.groupby("label"):
-        # spread picks across distinct runs for diversity
-        per_run = g.groupby("run_id", group_keys=False)
-        sample = per_run.apply(lambda x: x.sample(1, random_state=0)).sample(
-            min(args.per_class, g["run_id"].nunique()), random_state=0
-        )
-        if len(sample) < args.per_class:  # top up from the class at large
-            extra = g.drop(sample.index).sample(
-                min(args.per_class - len(sample), len(g) - len(sample)), random_state=1
-            )
-            sample = sample._append(extra) if hasattr(sample, "_append") else sample.append(extra)
+        g = g.sample(frac=1, random_state=0)               # shuffle within class
+        sample = g.groupby("run_id").head(1).head(args.per_class)  # spread across runs first
+        if len(sample) < args.per_class:                   # top up from remaining frames
+            rest = g.drop(sample.index)
+            sample = pd.concat([sample, rest.head(args.per_class - len(sample))])
         picks.append(sample)
 
-    import pandas as pd
     sel = pd.concat(picks).reset_index(drop=True)
 
     listing = []
