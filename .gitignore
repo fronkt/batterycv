@@ -1,0 +1,29 @@
+# data & artifacts — never commit
+*.bmp
+*.zip
+*.png
+*.jpg
+*.jpeg
+/data/
+batterycv-data/
+runs/
+weights/
+*.pt
+*.pth
+*.onnx
+
+# python
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.pytest_cache/
+
+# os / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# keep small viz samples explicitly if needed via: git add -f docs/figures/<file>
+!docs/figures/*.png

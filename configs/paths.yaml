@@ -1,0 +1,11 @@
+# Central path config. All scripts read this via batterycv.config.load_paths().
+# Edit here if the data location changes (e.g., E:\ when mounted).
+zip_path:  C:/Users/frank/Downloads/OneDrive_1_3-7-2025.zip
+data_root: C:/Users/frank/batterycv-data
+raw_dir:   C:/Users/frank/batterycv-data/raw
+work_dir:  C:/Users/frank/batterycv-data/work
+manifest:  C:/Users/frank/batterycv-data/manifest.csv
+
+# Pseudo-label + YOLO dataset locations (built by pseudo_label_sam.py / make_val_split.py)
+yolo_dataset: C:/Users/frank/batterycv-data/yolo
+eval_dir:     C:/Users/frank/batterycv-data/eval   # hand-verified val set lives here
