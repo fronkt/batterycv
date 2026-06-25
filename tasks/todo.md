@@ -17,7 +17,7 @@ Full plan: `../.claude/plans/buzzing-tinkering-panda.md` (or repo `docs/` once c
 - [ ] `train_detector.py` — YOLO11 single-class battery
 - [ ] `eval_detection.py` — mAP / recall / precision vs hand-verified set
 - [ ] `track.py` — ByteTrack per-battery IDs over a run; export crops
-- [ ] Push to GitHub (`batterycv`) after `gh auth login`
+- [x] Push to GitHub (`fronkt/batterycv`, main) — initial scaffold live
 
 ## Deferred (scaffolded only)
 - Step 2 OCR on tracked crops · Step 3 type classification (text vs image vs multimodal)
