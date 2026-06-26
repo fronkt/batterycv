@@ -1,39 +1,40 @@
 #!/usr/bin/env bash
-# Provision a Vast.ai GPU box (RTX 5090) for batterycv: SAM pseudo-labeling + YOLO training.
-# Notes (from prior Vast workflow):
-#   - RTX 5090 (Blackwell) needs the cu128 torch wheels.
-#   - Confirm Inet >= 200 Mbit/s before moving the ~10 GB dataset.
-#   - Cap dataloader workers on high-core boxes (set --workers in train, or OMP threads).
+# Provision a Vast.ai GPU box for batterycv (SAM pseudo-labeling + YOLO11 training).
+# Idempotent. Designed for the Vast *PyTorch* base image, which already ships a working
+# torch+cu128 in /venv/main -- we DO NOT reinstall torch (that risks breaking the tuned
+# Blackwell/sm_120 build); we only add the project deps and the SAM checkpoint.
+#
+#   bash vast/setup.sh
 set -euo pipefail
 
-echo ">> python: $(python3 --version)"
+VENV="${VENV:-/venv/main}"
+CKPT_DIR="${CKPT_DIR:-/workspace/checkpoints}"
+SAM_URL="https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth"
 
-# 1) PyTorch for Blackwell (cu128)
-pip install --upgrade pip
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+# shellcheck disable=SC1091
+source "$VENV/bin/activate" 2>/dev/null || { echo "no venv at $VENV"; exit 1; }
 
-# 2) project deps
-pip install ultralytics opencv-python-headless numpy pandas pyyaml tqdm supervision
-pip install git+https://github.com/facebookresearch/segment-anything.git
-
-# 3) SAM checkpoint (vit_h ~2.5 GB)
-mkdir -p checkpoints
-if [ ! -f checkpoints/sam_vit_h_4b8939.pth ]; then
-  wget -q --show-progress -O checkpoints/sam_vit_h_4b8939.pth \
-    https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth
-fi
-
-# 4) sanity check
-python3 - <<'PY'
+echo ">> python: $(python --version)"
+python - <<'PY'
 import torch
-print("torch", torch.__version__, "cuda", torch.cuda.is_available(),
-      torch.cuda.get_device_name(0) if torch.cuda.is_available() else "no gpu")
+print(">> torch", torch.__version__, "| cuda", torch.cuda.is_available(),
+      "|", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "no gpu")
 PY
 
-cat <<'EOF'
+# Project deps only -- torch is already present and satisfies ultralytics/SAM.
+PIP="uv pip"; command -v uv >/dev/null 2>&1 || PIP="pip"
+echo ">> installing project deps with: $PIP"
+$PIP install ultralytics opencv-python-headless segment-anything supervision pandas pyyaml tqdm
 
-NEXT (on the box, after staging data to ./batterycv-data/raw):
-  python scripts/pseudo_label_sam.py --ckpt checkpoints/sam_vit_h_4b8939.pth --model vit_h
-  python scripts/train_detector.py --model yolo11s.pt --epochs 80 --imgsz 1024 --batch 16 --device 0
-Then pull runs/detect/battery_yolo11/weights/best.pt back to the local repo.
-EOF
+# SAM checkpoint (vit_h ~2.5 GB) -- skip if already downloaded.
+mkdir -p "$CKPT_DIR"
+CKPT="$CKPT_DIR/sam_vit_h_4b8939.pth"
+if [ -s "$CKPT" ]; then
+  echo ">> SAM checkpoint present: $CKPT ($(du -h "$CKPT" | cut -f1))"
+else
+  echo ">> downloading SAM vit_h -> $CKPT"
+  wget -q --show-progress -O "$CKPT" "$SAM_URL"
+fi
+
+python -c "import ultralytics, segment_anything, cv2; print('>> deps OK:', ultralytics.__version__)"
+echo ">> setup complete. Next: stage data, then  bash vast/run_pipeline.sh"

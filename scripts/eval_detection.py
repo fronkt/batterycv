@@ -40,9 +40,12 @@ def main() -> None:
         encoding="utf-8",
     )
 
+    # absolute project dir so Ultralytics doesn't nest it under its own runs_dir
+    eval_project = Path(__file__).resolve().parents[1] / "runs" / "eval"
     model = YOLO(args.weights)
     m = model.val(data=str(data), split="val", device=args.device,
-                  project="runs/eval", name="battery_eval", plots=True, save_json=True)
+                  project=str(eval_project), name="battery_eval", exist_ok=True,
+                  plots=True, save_json=True)
     box = m.box
     print("\n--- detection metrics (hand-verified set) ---")
     print(f"  precision : {box.mp:.3f}")

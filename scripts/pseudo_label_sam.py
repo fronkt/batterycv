@@ -10,6 +10,7 @@ Frames listed in <eval_dir>/val_list.txt are EXCLUDED to avoid train/val leakage
 from __future__ import annotations
 
 import argparse
+import random
 import sys
 from pathlib import Path
 
@@ -54,14 +55,19 @@ def main() -> None:
     ap.add_argument("--model", default="vit_h", choices=["vit_h", "vit_l", "vit_b"])
     ap.add_argument("--limit", type=int, default=0, help="0 = all frames")
     ap.add_argument("--device", default="cuda")
+    ap.add_argument("--val-frac", type=float, default=0.1,
+                    help="fraction of pseudo-labeled frames held out as YOLO val "
+                         "(early-stopping signal; the hand-verified eval set is the real test)")
     args = ap.parse_args()
 
     from segment_anything import SamAutomaticMaskGenerator, sam_model_registry
 
     paths = load_paths()
     ds = paths["yolo_dataset"]
-    (ds / "images" / "train").mkdir(parents=True, exist_ok=True)
-    (ds / "labels" / "train").mkdir(parents=True, exist_ok=True)
+    for split in ("train", "val"):
+        (ds / "images" / split).mkdir(parents=True, exist_ok=True)
+        (ds / "labels" / split).mkdir(parents=True, exist_ok=True)
+    rng = random.Random(0)
 
     exclude = set()
     vlist = paths["eval_dir"] / "val_list.txt"
@@ -81,6 +87,7 @@ def main() -> None:
         df = df.head(args.limit)
 
     n_boxes = 0
+    n_split = {"train": 0, "val": 0}
     for i, (_, r) in enumerate(df.iterrows()):
         bgr = normalize_illumination(read_bgr(r["path"]))
         h, w = bgr.shape[:2]
@@ -96,24 +103,29 @@ def main() -> None:
             cx, cy = (x1 + x2) / 2 / w, (y1 + y2) / 2 / h
             bw, bh = (x2 - x1) / w, (y2 - y1) / h
             lines.append(f"0 {cx:.6f} {cy:.6f} {bw:.6f} {bh:.6f}")
+        split = "val" if rng.random() < args.val_frac else "train"
+        n_split[split] += 1
         stem = f"{r['label']}__{Path(r['path']).stem}"
-        cv2.imwrite(str(ds / "images" / "train" / f"{stem}.jpg"), bgr)
-        (ds / "labels" / "train" / f"{stem}.txt").write_text("\n".join(lines), encoding="utf-8")
+        cv2.imwrite(str(ds / "images" / split / f"{stem}.jpg"), bgr)
+        (ds / "labels" / split / f"{stem}.txt").write_text("\n".join(lines), encoding="utf-8")
         n_boxes += len(lines)
         if (i + 1) % 50 == 0:
-            print(f"  {i+1}/{len(df)} frames, {n_boxes} boxes")
+            print(f"  {i+1}/{len(df)} frames, {n_boxes} boxes "
+                  f"(train={n_split['train']}, val={n_split['val']})")
 
-    # data.yaml (val points to the hand-verified set if present)
-    val_images = (paths["eval_dir"] / "images")
+    # YOLO val = held-out pseudo-labeled frames (early-stopping signal). The hand-verified
+    # eval set stays a separate honest test, scored by eval_detection.py.
+    have_val = n_split["val"] > 0
     data_yaml = ds / "data.yaml"
     data_yaml.write_text(
         f"path: {ds.as_posix()}\n"
         f"train: images/train\n"
-        f"val: {val_images.as_posix() if val_images.exists() else 'images/train'}\n"
+        f"val: {'images/val' if have_val else 'images/train'}\n"
         f"names:\n  0: battery\n",
         encoding="utf-8",
     )
-    print(f"\ndone: {len(df)} frames, {n_boxes} pseudo-boxes -> {ds}")
+    print(f"\ndone: {len(df)} frames, {n_boxes} pseudo-boxes "
+          f"(train={n_split['train']}, val={n_split['val']}) -> {ds}")
     print(f"data.yaml -> {data_yaml}")
 
 

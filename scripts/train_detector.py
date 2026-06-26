@@ -22,6 +22,8 @@ def main() -> None:
     ap.add_argument("--imgsz", type=int, default=1024)
     ap.add_argument("--batch", type=int, default=16)
     ap.add_argument("--device", default="0")
+    ap.add_argument("--workers", type=int, default=8,
+                    help="dataloader workers — cap this on high-core boxes")
     ap.add_argument("--data", default=None, help="override path to data.yaml")
     args = ap.parse_args()
 
@@ -32,6 +34,12 @@ def main() -> None:
     if not data.exists():
         sys.exit(f"data.yaml not found: {data} (run pseudo_label_sam.py first)")
 
+    # absolute project dir so Ultralytics doesn't re-root the relative path (it nests it under
+    # its own runs_dir otherwise -> runs/detect/runs/detect/...). exist_ok=True so reruns
+    # overwrite in place instead of spawning battery_yolo11{2,3,...}.
+    repo_root = Path(__file__).resolve().parents[1]
+    project = repo_root / "runs" / "detect"
+
     model = YOLO(args.model)
     model.train(
         data=str(data),
@@ -39,14 +47,16 @@ def main() -> None:
         imgsz=args.imgsz,
         batch=args.batch,
         device=args.device,
-        project="runs/detect",
+        workers=args.workers,
+        project=str(project),
         name="battery_yolo11",
+        exist_ok=True,
         seed=0,
         patience=20,
         # conveyor frames are top-down: vertical/horizontal flips are valid; no big rotations
         fliplr=0.5, flipud=0.5, degrees=0.0, mosaic=1.0,
     )
-    print("training done -> runs/detect/battery_yolo11/weights/best.pt")
+    print(f"training done -> {project / 'battery_yolo11' / 'weights' / 'best.pt'}")
 
 
 if __name__ == "__main__":

@@ -37,14 +37,25 @@ def parse_timestamp(stem: str) -> datetime | None:
         return None
 
 
+# frame extensions, in preference order (one row per stem). BMP locally; the GPU box
+# trains on JPEGs re-encoded from those BMPs to cut transfer ~15x — read_bgr handles either.
+_IMG_EXTS = (".bmp", ".jpg", ".jpeg", ".png")
+
+
 def build_manifest(raw_dir: Path) -> pd.DataFrame:
-    """Walk <raw_dir>/<class>/*.bmp -> tidy DataFrame (one row per frame)."""
+    """Walk <raw_dir>/<class>/*.{bmp,jpg,jpeg,png} -> tidy DataFrame (one row per frame)."""
     rows = []
     for folder, meta in CLASSES.items():
         cls_dir = raw_dir / folder
         if not cls_dir.is_dir():
             continue
-        for p in sorted(cls_dir.glob("*.bmp")):  # non-recursive: tree is clean post-quarantine
+        seen: set[str] = set()  # one frame per stem even if both .bmp and .jpg are present
+        frames = []
+        for p in cls_dir.iterdir():  # non-recursive: tree is clean post-quarantine
+            if p.suffix.lower() in _IMG_EXTS and p.stem not in seen:
+                seen.add(p.stem)
+                frames.append(p)
+        for p in sorted(frames, key=lambda q: q.name):
             ts = parse_timestamp(p.stem)
             rows.append(
                 {

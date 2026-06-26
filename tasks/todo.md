@@ -11,11 +11,14 @@ Full plan: `../.claude/plans/buzzing-tinkering-panda.md` (or repo `docs/` once c
 - [x] Data verified: **2,493 distinct frames**, 6 classes (mobile corrected 1465→1099)
 - [x] `build_manifest.py` — manifest CSV, 2493 rows, 100% timestamps, 103 runs @ gap 2s
 - [x] `eda.py` — brightness mean ~70/255 (dark, uniform across classes); ~4 fps capture
-- [ ] `make_val_split.py` — sample ~12/class eval frames → **hand-label (user)**
-- [ ] `pseudo_label_sam.py` — SAM auto-boxes → YOLO train set (on GPU box)
-- [ ] `vast/setup.sh` — provision RTX 5090 (cu128), stage data
-- [ ] `train_detector.py` — YOLO11 single-class battery
-- [ ] `eval_detection.py` — mAP / recall / precision vs hand-verified set
+- [x] `make_val_split.py` — 72 eval frames sampled + CLAHE-normalized (`eval/images`)
+- [ ] hand-label the 72 eval frames (`label_eval.py`) → `eval/labels` — **user**
+- [x] Turnkey Vast path: `bmp_to_jpg.py` (9 GB→0.8 GB JPEG stage), `vast/{setup,run_pipeline,stage_data,pull_results}.sh`, `vast/README.md`
+- [x] `BATTERYCV_PATHS` env override + manifest globs jpg/bmp (box trains on compact JPEGs)
+- [~] **GPU run live (RTX 5090, 2026-06-26):** SAM pseudo-label → YOLO11 train → eval
+  - [ ] `pseudo_label_sam.py` — SAM auto-boxes → YOLO train set (+10% held-out val for early stop)
+  - [ ] `train_detector.py` — YOLO11s single-class battery
+  - [ ] `eval_detection.py` — mAP / recall / precision (runs once eval frames are hand-labeled)
 - [ ] `track.py` — ByteTrack per-battery IDs over a run; export crops
 - [x] Push to GitHub (`fronkt/batterycv`, main) — initial scaffold live
 
@@ -34,5 +37,8 @@ Full plan: `../.claude/plans/buzzing-tinkering-panda.md` (or repo `docs/` once c
 - _Classical detector:_ runs end-to-end but is a weak fallback — misses dark batteries that
   blend into the belt and fires on belt texture. Confirms SAM pseudo-labels are the right
   primary path for the trained detector.
-- _Detection metrics:_ TBD (after GPU training)
+- _Transfer:_ raw is 9.13 GB uncompressed BMP; re-encoding to JPEG q95 (`bmp_to_jpg.py`) gives a
+  0.81 GB stage (11.3× smaller, visually lossless) that tar-pipes to the box in minutes — and is
+  consistent with the already-JPEG eval set.
+- _Detection metrics:_ TBD (GPU training in progress)
 - _Tracking sanity:_ TBD
