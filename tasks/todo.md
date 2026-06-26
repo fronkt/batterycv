@@ -15,10 +15,10 @@ Full plan: `../.claude/plans/buzzing-tinkering-panda.md` (or repo `docs/` once c
 - [ ] hand-label the 72 eval frames (`label_eval.py`) → `eval/labels` — **user**
 - [x] Turnkey Vast path: `bmp_to_jpg.py` (9 GB→0.8 GB JPEG stage), `vast/{setup,run_pipeline,stage_data,pull_results}.sh`, `vast/README.md`
 - [x] `BATTERYCV_PATHS` env override + manifest globs jpg/bmp (box trains on compact JPEGs)
-- [~] **GPU run live (RTX 5090, 2026-06-26):** SAM pseudo-label → YOLO11 train → eval
-  - [ ] `pseudo_label_sam.py` — SAM auto-boxes → YOLO train set (+10% held-out val for early stop)
-  - [ ] `train_detector.py` — YOLO11s single-class battery
-  - [ ] `eval_detection.py` — mAP / recall / precision (runs once eval frames are hand-labeled)
+- [x] **GPU run DONE (RTX 5090, 2026-06-26):** SAM pseudo-label → YOLO11s train
+  - [x] `pseudo_label_sam.py` — 2421 frames, **46,125 boxes** (train=2163, val=258, ~19/frame, pps=24)
+  - [x] `train_detector.py` — YOLO11s 80ep imgsz1024, 26 min; best.pt pulled to `runs/detect/battery_yolo11/`
+  - [ ] `eval_detection.py` — pending the hand-labeled eval set (held-out **pseudo**-val: P .79 R .79 mAP50 .86 mAP50-95 .77)
 - [ ] `track.py` — ByteTrack per-battery IDs over a run; export crops
 - [x] Push to GitHub (`fronkt/batterycv`, main) — initial scaffold live
 
@@ -40,5 +40,12 @@ Full plan: `../.claude/plans/buzzing-tinkering-panda.md` (or repo `docs/` once c
 - _Transfer:_ raw is 9.13 GB uncompressed BMP; re-encoding to JPEG q95 (`bmp_to_jpg.py`) gives a
   0.81 GB stage (11.3× smaller, visually lossless) that tar-pipes to the box in minutes — and is
   consistent with the already-JPEG eval set.
-- _Detection metrics:_ TBD (GPU training in progress)
-- _Tracking sanity:_ TBD
+- _Detection (held-out pseudo-val, 258 frames / 5138 boxes):_ P 0.787, R 0.794, mAP50 0.859,
+  mAP50-95 0.771. **Caveat:** measured vs SAM pseudo-labels, which share the detector's belt-FP
+  bias → optimistic. Honest precision needs the hand-labeled eval set.
+- _Qualitative (best.pt on eval frames):_ reliably boxes real laptop/mobile batteries at high conf
+  (0.9+); **over-fires on empty belt texture and frame edges**, worst on sparse frames (low-conf
+  0.3–0.5 ghosts). Next levers: tighten SAM `keep_mask` (belt rejection), raise inference conf,
+  and use the hand-labeled eval to tune conf/NMS. SAM pass is CPU-bound (GPU ~7% util) — a future
+  speedup is parallel SAM workers or vit_b.
+- _Tracking sanity:_ TBD (run `track.py` once best.pt is trusted)
