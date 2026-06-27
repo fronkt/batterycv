@@ -12,13 +12,13 @@ Full plan: `../.claude/plans/buzzing-tinkering-panda.md` (or repo `docs/` once c
 - [x] `build_manifest.py` — manifest CSV, 2493 rows, 100% timestamps, 103 runs @ gap 2s
 - [x] `eda.py` — brightness mean ~70/255 (dark, uniform across classes); ~4 fps capture
 - [x] `make_val_split.py` — 72 eval frames sampled + CLAHE-normalized (`eval/images`)
-- [ ] hand-label the 72 eval frames (`label_eval.py`) → `eval/labels` — **user**
+- [x] hand-label the 72 eval frames → `eval/labels` (182 boxes, 4 genuine-empty frames; CLAHE+grid assisted, overlay-verified)
 - [x] Turnkey Vast path: `bmp_to_jpg.py` (9 GB→0.8 GB JPEG stage), `vast/{setup,run_pipeline,stage_data,pull_results}.sh`, `vast/README.md`
 - [x] `BATTERYCV_PATHS` env override + manifest globs jpg/bmp (box trains on compact JPEGs)
 - [x] **GPU run DONE (RTX 5090, 2026-06-26):** SAM pseudo-label → YOLO11s train
   - [x] `pseudo_label_sam.py` — 2421 frames, **46,125 boxes** (train=2163, val=258, ~19/frame, pps=24)
   - [x] `train_detector.py` — YOLO11s 80ep imgsz1024, 26 min; best.pt pulled to `runs/detect/battery_yolo11/`
-  - [ ] `eval_detection.py` — pending the hand-labeled eval set (held-out **pseudo**-val: P .79 R .79 mAP50 .86 mAP50-95 .77)
+  - [x] `eval_detection.py` on hand labels — **honest: P .23 R .42 mAP50 .19 mAP50-95 .045** (vs pseudo-val .79/.79/.86/.77). Diagnosis below.
 - [ ] `track.py` — ByteTrack per-battery IDs over a run; export crops
 - [x] Push to GitHub (`fronkt/batterycv`, main) — initial scaffold live
 
@@ -48,4 +48,17 @@ Full plan: `../.claude/plans/buzzing-tinkering-panda.md` (or repo `docs/` once c
   0.3–0.5 ghosts). Next levers: tighten SAM `keep_mask` (belt rejection), raise inference conf,
   and use the hand-labeled eval to tune conf/NMS. SAM pass is CPU-bound (GPU ~7% util) — a future
   speedup is parallel SAM workers or vit_b.
-- _Tracking sanity:_ TBD (run `track.py` once best.pt is trusted)
+- _Honest eval (72 hand-labeled frames, 182 boxes, IoU 0.5):_ **P 0.23, R 0.42, mAP50 0.19,
+  mAP50-95 0.045** — far below the 0.86 pseudo-val (which shared SAM's bias). Threshold sweep:
+  precision never exceeds ~0.21 even at conf≥0.9 (303 FP vs 78 TP); recall caps at ~0.47 at any
+  conf. Root causes, diagnosed from GT-vs-pred overlays:
+  1. **Over-segmentation (dominant):** the detector learned SAM's habit of splitting one battery
+     into many sub-part boxes — a dense laptop frame has 6 real batteries but 71 predictions ≥0.5
+     (boxes on every label/cell/logo). Kills precision and depresses IoU-0.5 recall (fragments
+     don't match whole-battery GT).
+  2. **Belt false positives:** fires 6 confident boxes on a totally empty belt frame (seam/edges).
+  3. Isolated bright cells (ni_mh) are handled well — confirms the labels are fair and the problem
+     is the pseudo-label strategy, not the eval. Fix path: dedup/merge SAM masks (NMS + drop masks
+     contained in larger ones) so one battery = one box; tighten belt rejection; consider
+     `min_mask_region_area`↑ and whole-object prompting. Re-pseudo-label → retrain is the real fix.
+- _Tracking sanity:_ TBD (run `track.py` once best.pt over-segmentation is fixed)
