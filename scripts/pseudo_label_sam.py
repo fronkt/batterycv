@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from batterycv.config import load_paths
 from batterycv.io import build_manifest
+from batterycv.merge import merge_boxes
 from batterycv.preprocess import normalize_illumination, read_bgr
 
 
@@ -31,22 +32,47 @@ def mask_to_box(seg: np.ndarray):
     return int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())
 
 
-def keep_mask(m: dict, h: int, w: int) -> bool:
+def keep_mask(m: dict, h: int, w: int, area_min: float, area_max: float,
+              aspect_min: float, aspect_max: float, stability: float) -> bool:
     a = m["area"] / (h * w)
-    if not (5e-4 <= a <= 0.15):                 # too small (texture) / too big (belt)
+    if not (area_min <= a <= area_max):         # too small (texture) / too big (belt)
         return False
     x, y, bw, bh = m["bbox"]
     if bw < 8 or bh < 8:
         return False
     aspect = bw / max(bh, 1)
-    if not (0.15 <= aspect <= 6.0):
+    if not (aspect_min <= aspect <= aspect_max):
         return False
-    if m.get("stability_score", 1.0) < 0.85:
+    if m.get("stability_score", 1.0) < stability:
         return False
     # reject masks hugging the whole frame border (belt segments)
     if x <= 1 and y <= 1 and (x + bw) >= w - 2 and (y + bh) >= h - 2:
         return False
     return True
+
+
+def frame_to_boxes(masks, h, w, keep_kw, merge_kw, do_merge):
+    """SAM masks -> list of pixel [x1,y1,x2,y2] battery boxes (filtered + de-duplicated).
+
+    Shared by the full pipeline and the eval-frame probe so both score identical logic.
+    `scores` for the merge use mask stability (prefer cleaner masks on ties); the
+    containment pass is area-driven so whole-object masks win over their sub-parts.
+    """
+    boxes, scores = [], []
+    for m in masks:
+        if not keep_mask(m, h, w, **keep_kw):
+            continue
+        box = mask_to_box(m["segmentation"])
+        if box is None:
+            continue
+        boxes.append(box)
+        scores.append(m.get("stability_score", 1.0))
+    if not boxes:
+        return []
+    if do_merge:
+        out, _ = merge_boxes(boxes, scores, **merge_kw)
+        return [tuple(map(float, b)) for b in out]
+    return [tuple(map(float, b)) for b in boxes]
 
 
 def main() -> None:
@@ -64,7 +90,27 @@ def main() -> None:
     ap.add_argument("--points-per-batch", type=int, default=256,
                     help="point prompts per forward pass — same masks, bigger = faster on a "
                          "big-VRAM GPU (SAM default 64; 256 is ~3x faster on a 32 GB card)")
+    # --- keep_mask filter (tunable; small cells need a lower area floor) ---
+    ap.add_argument("--area-min", type=float, default=5e-4)
+    ap.add_argument("--area-max", type=float, default=0.15)
+    ap.add_argument("--aspect-min", type=float, default=0.15)
+    ap.add_argument("--aspect-max", type=float, default=6.0)
+    ap.add_argument("--stability", type=float, default=0.85)
+    # --- de-duplication / merge of fragmented masks (see batterycv.merge) ---
+    ap.add_argument("--no-merge", dest="merge", action="store_false",
+                    help="disable box de-duplication (debug; default merges)")
+    ap.add_argument("--merge-iou", type=float, default=0.5)
+    ap.add_argument("--contain-thresh", type=float, default=0.75)
+    ap.add_argument("--no-agglomerate", dest="agglomerate", action="store_false")
+    ap.add_argument("--agg-iou", type=float, default=0.2)
+    ap.set_defaults(merge=True, agglomerate=True)
     args = ap.parse_args()
+
+    keep_kw = dict(area_min=args.area_min, area_max=args.area_max,
+                   aspect_min=args.aspect_min, aspect_max=args.aspect_max,
+                   stability=args.stability)
+    merge_kw = dict(iou_thresh=args.merge_iou, contain_thresh=args.contain_thresh,
+                    agglomerate=args.agglomerate, agg_iou=args.agg_iou)
 
     from segment_anything import SamAutomaticMaskGenerator, sam_model_registry
 
@@ -101,13 +147,7 @@ def main() -> None:
         h, w = bgr.shape[:2]
         masks = gen.generate(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB))
         lines = []
-        for m in masks:
-            if not keep_mask(m, h, w):
-                continue
-            box = mask_to_box(m["segmentation"])
-            if box is None:
-                continue
-            x1, y1, x2, y2 = box
+        for x1, y1, x2, y2 in frame_to_boxes(masks, h, w, keep_kw, merge_kw, args.merge):
             cx, cy = (x1 + x2) / 2 / w, (y1 + y2) / 2 / h
             bw, bh = (x2 - x1) / w, (y2 - y1) / h
             lines.append(f"0 {cx:.6f} {cy:.6f} {bw:.6f} {bh:.6f}")

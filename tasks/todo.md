@@ -61,4 +61,16 @@ Full plan: `../.claude/plans/buzzing-tinkering-panda.md` (or repo `docs/` once c
      is the pseudo-label strategy, not the eval. Fix path: dedup/merge SAM masks (NMS + drop masks
      contained in larger ones) so one battery = one box; tighten belt rejection; consider
      `min_mask_region_area`↑ and whole-object prompting. Re-pseudo-label → retrain is the real fix.
-- _Tracking sanity:_ TBD (run `track.py` once best.pt over-segmentation is fixed)
+- _Merge + recall-ceiling investigation (2026-06-27, see `docs/recall_ceiling_findings.md`):_
+  Implemented `batterycv/merge.py` (containment-drop + NMS + agglomerate) and wired it into
+  `pseudo_label_sam.py` (keep_mask/merge/pps now flags). **Merge is a precision win** (detector
+  output, conf≥0.5: boxes/frame 14→5.6, P 0.085→0.197, recall held) **but not a recall fix.**
+  Probed the recall ceiling 3 ways on the 72 hand frames: trained YOLO11s 0.51, SAM auto-mask
+  0.45, YOLO-World "battery" 0.43 — **same wall, same classes missed** (ni_mh ~0.08, mobile
+  ~0.30). CLAHE / pps 24→48 / multi-prompt / lower conf did not move it. Root cause (verified on
+  GT-vs-box overlays): dark battery bodies blend into the dark belt; zero-shot models box only
+  the bright label → undersized IoU 0.3–0.49. GT confirmed correct. **Re-label+retrain on
+  SAM+merge will lift precision, not recall.** Decision pending: (A) retrain on improved labeler
+  for the precision win, (B) switch labeler SAM→YOLO-World+merge (whole-object, 3× precision,
+  cheaper), or (C) hand-label ~150–300 frames to fine-tune (only path past ~0.45 recall).
+- _Tracking sanity:_ TBD (run `track.py` once a deployable detector exists)
