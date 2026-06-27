@@ -51,3 +51,23 @@ ceiling needs whole-object supervision on *this* domain, not a better zero-shot 
 - **Path to deployable recall:** a few hundred hand-labeled frames to fine-tune (semi-supervised
   from the YOLO-World boxes), and/or flag belt **lighting** to the hardware side — better
   contrast on the dark bodies is the cheapest real lever.
+
+## Outcome — labeler swap SAM → YOLO-World (2026-06-27, executed)
+New labeler `scripts/pseudo_label_yoloworld.py` (YOLO-World `yolov8x-worldv2`, prompt "battery",
+conf 0.05, conservative dedup). Full re-label of 2,421 frames in **1m46s** (vs SAM's ~2.5 hr) →
+8,049 whole-object boxes (~3.3/frame vs SAM's ~19). Retrained YOLO11s with identical hyperparams
+(80 ep, imgsz 1024, batch 16). Honest eval vs the 72 hand labels:
+
+| metric      | SAM-trained | YOLO-World-trained |
+|-------------|------------:|-------------------:|
+| precision   | 0.23 | **0.42** |
+| recall      | 0.42 | 0.35 |
+| mAP@0.5     | 0.19 | 0.19 |
+| mAP@0.5:.95 | 0.045 | 0.047 |
+
+Precision **nearly doubled** with far fewer belt false-positives (overlays: clean whole-object
+boxes at 0.9–1.0 conf), but **mAP@0.5 is pinned at 0.19** — confirming the recall ceiling is
+structural, not a labeler artifact. The swap moves along the same PR frontier (recall→precision)
+and can't break it. Net engineering wins regardless: 80× faster labeling, interpretable
+whole-object boxes, deployment-grade precision. Weights (gitignored): SAM =
+`runs/detect/battery_yolo11/`, YOLO-World = `runs/detect/battery_yolo11_yw/`.

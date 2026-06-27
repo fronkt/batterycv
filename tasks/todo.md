@@ -70,7 +70,14 @@ Full plan: `../.claude/plans/buzzing-tinkering-panda.md` (or repo `docs/` once c
   ~0.30). CLAHE / pps 24→48 / multi-prompt / lower conf did not move it. Root cause (verified on
   GT-vs-box overlays): dark battery bodies blend into the dark belt; zero-shot models box only
   the bright label → undersized IoU 0.3–0.49. GT confirmed correct. **Re-label+retrain on
-  SAM+merge will lift precision, not recall.** Decision pending: (A) retrain on improved labeler
-  for the precision win, (B) switch labeler SAM→YOLO-World+merge (whole-object, 3× precision,
-  cheaper), or (C) hand-label ~150–300 frames to fine-tune (only path past ~0.45 recall).
+  SAM+merge will lift precision, not recall.**
+- _Labeler swap SAM→YOLO-World DONE (2026-06-27, user chose option B):_ new
+  `scripts/pseudo_label_yoloworld.py` (yolov8x-worldv2, "battery", conf 0.05) re-labeled 2,421
+  frames in **1m46s** (vs SAM 2.5 hr) → 8,049 whole-object boxes; retrained YOLO11s (same
+  hyperparams). Honest eval vs hand GT: **P 0.42 · R 0.35 · mAP50 0.19 · mAP50-95 0.047** — vs
+  SAM-trained P 0.23 · R 0.42 · mAP50 0.19. **Precision ~2× (belt-FP storm gone, clean
+  whole-object boxes), mAP50 pinned at 0.19 = the structural recall ceiling.** Weights:
+  `runs/detect/battery_yolo11_yw/weights/best.pt` (gitignored; SAM baseline kept at
+  `battery_yolo11/`). Next-recall levers (not started): hand-label ~150–300 frames to fine-tune,
+  or improve belt lighting (hardware).
 - _Tracking sanity:_ TBD (run `track.py` once a deployable detector exists)
