@@ -58,6 +58,12 @@ def main() -> None:
     ap.add_argument("--val-frac", type=float, default=0.1,
                     help="fraction of pseudo-labeled frames held out as YOLO val "
                          "(early-stopping signal; the hand-verified eval set is the real test)")
+    ap.add_argument("--points-per-side", type=int, default=24,
+                    help="SAM sampling grid density. 24 is a good speed/quality balance for these "
+                         "frames (32 ~doubles cost and over-segments batteries into sub-parts)")
+    ap.add_argument("--points-per-batch", type=int, default=256,
+                    help="point prompts per forward pass — same masks, bigger = faster on a "
+                         "big-VRAM GPU (SAM default 64; 256 is ~3x faster on a 32 GB card)")
     args = ap.parse_args()
 
     from segment_anything import SamAutomaticMaskGenerator, sam_model_registry
@@ -78,8 +84,10 @@ def main() -> None:
     print(f"excluding {len(exclude)} held-out eval frames from training set")
 
     sam = sam_model_registry[args.model](checkpoint=args.ckpt).to(args.device)
-    gen = SamAutomaticMaskGenerator(sam, points_per_side=32, pred_iou_thresh=0.86,
-                                    stability_score_thresh=0.9, min_mask_region_area=400)
+    gen = SamAutomaticMaskGenerator(sam, points_per_side=args.points_per_side,
+                                    points_per_batch=args.points_per_batch,
+                                    pred_iou_thresh=0.86, stability_score_thresh=0.9,
+                                    min_mask_region_area=400)
 
     df = build_manifest(paths["raw_dir"])
     df = df[~df["path"].map(lambda p: Path(p).stem in exclude)]
