@@ -78,6 +78,11 @@ Full plan: `../.claude/plans/buzzing-tinkering-panda.md` (or repo `docs/` once c
   SAM-trained P 0.23 · R 0.42 · mAP50 0.19. **Precision ~2× (belt-FP storm gone, clean
   whole-object boxes), mAP50 pinned at 0.19 = the structural recall ceiling.** Weights:
   `runs/detect/battery_yolo11_yw/weights/best.pt` (gitignored; SAM baseline kept at
-  `battery_yolo11/`). Next-recall levers (not started): hand-label ~150–300 frames to fine-tune,
-  or improve belt lighting (hardware).
+  `battery_yolo11/`).
+- _Resolution/capacity sweep DONE (2026-06-28):_ retrained s@1280 and m@1280 (same YOLO-World
+  labels). s@1280 **P 0.40 R 0.38 mAP50 0.194**, m@1280 P 0.42 R 0.36 mAP50 0.187 — vs s@1024
+  P 0.42 R 0.35 mAP50 0.19. Native 1280 nudged recall +0.03 but **mAP50 pinned ~0.19 across all
+  res/model sizes** → ceiling is the imagery, not resolution/capacity/epochs. Best operating point
+  = `runs/detect/battery_yw_s1280/weights/best.pt` (kept). Only remaining recall levers:
+  hand-labeled fine-tune (~150–300 frames) and/or belt **lighting** (hardware).
 - _Tracking sanity:_ TBD (run `track.py` once a deployable detector exists)

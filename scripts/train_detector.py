@@ -25,6 +25,7 @@ def main() -> None:
     ap.add_argument("--workers", type=int, default=8,
                     help="dataloader workers — cap this on high-core boxes")
     ap.add_argument("--data", default=None, help="override path to data.yaml")
+    ap.add_argument("--name", default="battery_yolo11", help="run name under runs/detect/")
     args = ap.parse_args()
 
     from ultralytics import YOLO
@@ -49,7 +50,7 @@ def main() -> None:
         device=args.device,
         workers=args.workers,
         project=str(project),
-        name="battery_yolo11",
+        name=args.name,
         exist_ok=True,
         seed=0,
         patience=20,

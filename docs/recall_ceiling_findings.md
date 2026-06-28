@@ -71,3 +71,21 @@ structural, not a labeler artifact. The swap moves along the same PR frontier (r
 and can't break it. Net engineering wins regardless: 80× faster labeling, interpretable
 whole-object boxes, deployment-grade precision. Weights (gitignored): SAM =
 `runs/detect/battery_yolo11/`, YOLO-World = `runs/detect/battery_yolo11_yw/`.
+
+## Resolution / capacity sweep — does NOT break the ceiling (2026-06-28)
+Hypothesis: missed boxes sit at IoU 0.3–0.49, so training at native 1280 (vs downscaling to
+1024) might push small-cell localization over the 0.5 bar. Trained two more YOLO11 on the same
+YOLO-World labels, identical hyperparams except imgsz/model:
+
+| config            | precision | recall | mAP@0.5 | mAP@0.5:.95 |
+|-------------------|----------:|-------:|--------:|------------:|
+| s @ 1024 (base)   | 0.42 | 0.35 | 0.19  | 0.047 |
+| **s @ 1280**      | 0.40 | **0.38** | **0.194** | **0.049** |
+| m @ 1280          | 0.42 | 0.36 | 0.187 | 0.046 |
+
+1280 nudged recall 0.35→0.38 as predicted, but **mAP@0.5 stays ~0.19 across all resolutions and
+model sizes** — bigger backbone did nothing. The ceiling is not resolution, capacity, or training
+time; it is the imagery. `s@1280` is marginally the best operating point (best recall + mAP,
+recall is the priority metric) → kept at `runs/detect/battery_yw_s1280/`. **No more zero-shot /
+architecture tuning will help — the only levers left are hand-labeled fine-tuning and belt
+lighting.**
