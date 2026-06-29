@@ -88,6 +88,20 @@ Full plan: `../.claude/plans/buzzing-tinkering-panda.md` (or repo `docs/` once c
 - _Fine-tune tooling BUILT (2026-06-29):_ `scripts/build_label_pool.py` (stratified, eval-excluded,
   CLAHE'd sampling → `batterycv-data/label_pool/`) + `scripts/label_assisted.py` (detector
   pre-fills boxes; right-click=delete FP, drag=add miss, resumable). This is the path past the
-  0.19/0.45 ceiling. **Next:** label a real pool (`--per-class 30` → ~180 frames), then fine-tune
-  YOLO11s from `battery_yw_s1280` best.pt on pseudo-labels + human labels, re-eval vs the 72 hand frames.
+  0.19/0.45 ceiling.
+- _Fine-tune EXPERIMENT 1 (2026-06-29):_ user hand-labeled the 36-frame demo pool (6/class, 81
+  boxes, 3 genuine-empty) via the assisted GUI. New `scripts/finetune_detector.py` continues from
+  `battery_yw_s1280` best.pt on the pool — explicit AdamW lr0=0.001 + cos_lr (NB: `optimizer=auto`
+  silently overrides lr0 to ~0.002, too hot for a tiny set from a good init → must pass optimizer
+  explicitly), 80 ep, imgsz 1280, all 6 classes balanced so easy classes aren't forgotten. Baseline
+  to beat (same eval harness, 72 frames): **P 0.446 · R 0.409 · mAP50 0.224**. **RESULT — it works:**
+  ft1 best.pt **P 0.466 · R 0.446 · mAP50 0.252** (last.pt P 0.476 · R 0.435 · mAP50 0.250). Every
+  metric up; **mAP50 +0.028 is the first thing to move it off the ~0.19–0.22 wall** that held across
+  all zero-shot labelers / resolutions / model sizes. Gain shows in both best AND last → real, not a
+  lucky epoch. Mechanism confirmed: human whole-object boxes teach the dark/small cells. Trained
+  imgsz 1024 / 40 ep / AdamW lr0 0.001 cos_lr, ~63 min on laptop CPU. best.pt kept at
+  `runs/detect/battery_ft1/weights/` (gitignored). **Next: scale the pool** `build_label_pool.py
+  --per-class 30` (~180 frames) → label assisted → re-run finetune; 36 frames gave +0.03–0.04, 180
+  should compound. (Gotcha logged: `optimizer=auto` overrides lr0; two stray trainers raced the same
+  save_dir once — always confirm a single PID + use a fresh run name.)
 - _Tracking sanity:_ TBD (run `track.py` once a deployable detector exists)

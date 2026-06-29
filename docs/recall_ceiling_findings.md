@@ -89,3 +89,27 @@ time; it is the imagery. `s@1280` is marginally the best operating point (best r
 recall is the priority metric) → kept at `runs/detect/battery_yw_s1280/`. **No more zero-shot /
 architecture tuning will help — the only levers left are hand-labeled fine-tuning and belt
 lighting.**
+
+## Hand-labeled fine-tune — the ceiling MOVES (2026-06-29)
+The predicted lever, executed at small scale. Built `scripts/build_label_pool.py` (stratified,
+eval-excluded, CLAHE'd frame sampling) + `scripts/label_assisted.py` (the trained detector
+pre-fills each frame's boxes; you right-click false-positives away and drag the few it missed —
+~5–10× faster than blank labeling). User hand-labeled a 36-frame demo pool (6/class, 81 boxes, 3
+genuine-empty). `scripts/finetune_detector.py` continues from `battery_yw_s1280` best.pt on the
+pool (AdamW lr0 0.001 + cos_lr — NB `optimizer=auto` silently overrides lr0 to ~0.002, must set
+optimizer explicitly), imgsz 1024, 40 ep, ~63 min on laptop CPU. Honest eval vs the held-out 72:
+
+| detector                         | precision | recall | mAP@0.5 | mAP@0.5:.95 |
+|----------------------------------|----------:|-------:|--------:|------------:|
+| s@1280 baseline (zero-shot labels) | 0.446 | 0.409 | 0.224 | 0.059 |
+| **ft1 best.pt (+36 human frames)** | 0.466 | **0.446** | **0.252** | 0.062 |
+| ft1 last.pt                        | 0.476 | 0.435 | 0.250 | 0.062 |
+
+Every metric improved, and **mAP@0.5 +0.028 is the first movement off the ~0.19–0.22 wall** that
+held flat across all three zero-shot labelers, every resolution, and every model size. The lift
+shows in both best AND last checkpoints → a real effect from the human supervision, not a lucky
+epoch. Mechanism confirmed exactly as predicted: whole-object human boxes teach the dark/small
+cells (ni_mh, mobile, ni_cd_small) that zero-shot models could only box by their bright label.
+Modest in absolute terms — but it's **36 frames**. The path forward is now empirical, not blocked:
+scale the pool to ~180 frames (`build_label_pool.py --per-class 30`) and re-run. best.pt kept
+(gitignored) at `runs/detect/battery_ft1/weights/`.
