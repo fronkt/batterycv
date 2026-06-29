@@ -85,4 +85,9 @@ Full plan: `../.claude/plans/buzzing-tinkering-panda.md` (or repo `docs/` once c
   res/model sizes** → ceiling is the imagery, not resolution/capacity/epochs. Best operating point
   = `runs/detect/battery_yw_s1280/weights/best.pt` (kept). Only remaining recall levers:
   hand-labeled fine-tune (~150–300 frames) and/or belt **lighting** (hardware).
+- _Fine-tune tooling BUILT (2026-06-29):_ `scripts/build_label_pool.py` (stratified, eval-excluded,
+  CLAHE'd sampling → `batterycv-data/label_pool/`) + `scripts/label_assisted.py` (detector
+  pre-fills boxes; right-click=delete FP, drag=add miss, resumable). This is the path past the
+  0.19/0.45 ceiling. **Next:** label a real pool (`--per-class 30` → ~180 frames), then fine-tune
+  YOLO11s from `battery_yw_s1280` best.pt on pseudo-labels + human labels, re-eval vs the 72 hand frames.
 - _Tracking sanity:_ TBD (run `track.py` once a deployable detector exists)
