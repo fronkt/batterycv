@@ -7,6 +7,7 @@ matplotlib>=3.8
 pyyaml>=6.0
 tqdm>=4.66
 ultralytics>=8.3.0        # YOLO11 detector + ByteTrack (pulls CPU torch locally)
+lapx>=0.5                 # linear-assignment solver ByteTrack needs (track.py)
 supervision>=0.22         # box/track visualization & dataset utils
 # SAM pseudo-labeling runs on the GPU box; install there via vast/setup.sh:
 #   segment-anything @ git+https://github.com/facebookresearch/segment-anything.git

@@ -19,7 +19,7 @@ Full plan: `../.claude/plans/buzzing-tinkering-panda.md` (or repo `docs/` once c
   - [x] `pseudo_label_sam.py` — 2421 frames, **46,125 boxes** (train=2163, val=258, ~19/frame, pps=24)
   - [x] `train_detector.py` — YOLO11s 80ep imgsz1024, 26 min; best.pt pulled to `runs/detect/battery_yolo11/`
   - [x] `eval_detection.py` on hand labels — **honest: P .23 R .42 mAP50 .19 mAP50-95 .045** (vs pseudo-val .79/.79/.86/.77). Diagnosis below.
-- [ ] `track.py` — ByteTrack per-battery IDs over a run; export crops
+- [x] `track.py` — ByteTrack per-battery IDs over a run; export crops (DONE 2026-06-29)
 - [x] Push to GitHub (`fronkt/batterycv`, main) — initial scaffold live
 
 ## Deferred (scaffolded only)
@@ -113,4 +113,12 @@ Full plan: `../.claude/plans/buzzing-tinkering-panda.md` (or repo `docs/` once c
   step-change lever is belt LIGHTING (hardware), not more labels.** Keeper = `battery_ft1/best.pt`
   (best mAP50, local; ft3 tied within noise). Box used was a shared 1×5090 (also runs STS2027) — do
   NOT destroy it.
-- _Tracking sanity:_ TBD (run `track.py` once a deployable detector exists)
+- _Tracking DONE (2026-06-29):_ `scripts/track.py` — ByteTrack (`bytetrack.yaml`, needs `lapx`)
+  over a timestamp-segmented run via `io.segment_runs`; CLAHE per frame, `model.track(persist=True)`.
+  Auto-picks the longest run of `--label` (or `--run-id`/`--list-runs`). Outputs annotated
+  `track.mp4`, best-conf crop per track ID (→ OCR phase), `tracks.csv`, summary. Demo on longest
+  laptop run (run 4, 32 frames): **6 unique batteries**, mean track len 5 frames, track #1 glides
+  855→305 px at ~0.95 conf — clean persistent IDs. Crops land in `<work_dir>/track/<run>/crops`.
+  Completes Phase-1 detect→track. Default weights = `battery_ft1/best.pt`. ID counter does fragment
+  a bit on the dark classes (re-id when a cell is briefly lost) — fine on laptop/ni_cd_bulk; same
+  imagery limit as detection elsewhere.
