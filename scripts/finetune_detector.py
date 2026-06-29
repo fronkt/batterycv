@@ -44,6 +44,10 @@ def main() -> None:
                     help="freeze first N layers (0 = full fine-tune; 10 = keep backbone stem)")
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--workers", type=int, default=4)
+    ap.add_argument("--no-val", dest="val", action="store_false",
+                    help="skip per-epoch validation (val==train here is just an overfit monitor; "
+                         "halves CPU time — the honest test is eval_detection.py on the 72 frames)")
+    ap.set_defaults(val=True)
     ap.add_argument("--name", default="battery_ft1")
     args = ap.parse_args()
 
@@ -89,6 +93,7 @@ def main() -> None:
         optimizer=args.optimizer,       # explicit so lr0 is honored (auto overrides it)
         lr0=args.lr0,
         cos_lr=True,                    # smooth decay of the already-low lr
+        val=args.val,
         patience=args.epochs,           # tiny set: run full, judge on the held-out 72
         freeze=args.freeze,
         fliplr=0.5, flipud=0.5, degrees=0.0, mosaic=1.0,

@@ -113,3 +113,28 @@ cells (ni_mh, mobile, ni_cd_small) that zero-shot models could only box by their
 Modest in absolute terms — but it's **36 frames**. The path forward is now empirical, not blocked:
 scale the pool to ~180 frames (`build_label_pool.py --per-class 30`) and re-run. best.pt kept
 (gitignored) at `runs/detect/battery_ft1/weights/`.
+
+## Scaling the pool 36 → 201 frames: the gain PLATEAUS (2026-06-29, GPU)
+User hand-labeled the full pool (201 frames, 560 boxes, 7 genuine-empty). Re-ran on a Vast RTX
+5090 (fine-tune is ~6 s/epoch there vs ~90 s on the laptop CPU). Two configs, eval at each model's
+native resolution on the held-out 72:
+
+| detector                          | frames | recipe        | precision | recall | mAP@0.5 |
+|-----------------------------------|-------:|---------------|----------:|-------:|--------:|
+| s@1280 baseline (zero-shot)       |      — | —             | 0.446 | 0.409 | 0.224 |
+| ft1 best (the 36-frame run)       |     36 | 1024 / 40 ep  | 0.466 | 0.446 | **0.252** |
+| ft3 best (same recipe as ft1)     |    201 | 1024 / 40 ep  | 0.442 | 0.441 | 0.234 |
+| ft3 last                          |    201 | 1024 / 40 ep  | 0.455 | 0.446 | 0.236 |
+| ft2 best                          |    201 | 1280 / 60 ep  | 0.444 | 0.435 | 0.224 |
+| ft2 last                          |    201 | 1280 / 60 ep  | 0.421 | 0.452 | 0.231 |
+
+**Scaling the labels 5.6× did not help.** At ft1's identical recipe, 201 frames (ft3, mAP50 0.234–
+0.236) came in *below* 36 frames (ft1, 0.252) — a gap inside the noise of a 72-frame / 186-box eval.
+Recall is flat at ~0.44–0.45 across all fine-tunes; precision flat ~0.44–0.47. 1280/60 ep (ft2)
+overfit the pool slightly (pool-val mAP 0.99) and was no better. **Conclusion: the fine-tune gives a
+real but one-shot bump over the zero-shot baseline (recall 0.41→~0.45, mAP50 0.224→~0.24) and then
+plateaus immediately — 36 careful frames already captured nearly all of it.** This is the same
+imagery ceiling reasserting itself: a few hundred YOLO boxes can't overcome low-contrast dark cells.
+**The remaining step-change lever is hardware — belt lighting / contrast — not more labels.** Keeper
+model stays `runs/detect/battery_ft1/weights/best.pt` (best mAP50, already local; ft3 is tied within
+noise).

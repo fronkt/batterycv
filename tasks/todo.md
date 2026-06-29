@@ -104,4 +104,13 @@ Full plan: `../.claude/plans/buzzing-tinkering-panda.md` (or repo `docs/` once c
   --per-class 30` (~180 frames) → label assisted → re-run finetune; 36 frames gave +0.03–0.04, 180
   should compound. (Gotcha logged: `optimizer=auto` overrides lr0; two stray trainers raced the same
   save_dir once — always confirm a single PID + use a fresh run name.)
+- _Pool scaled 36→201, gain PLATEAUS (2026-06-29, GPU):_ user labeled full 201-frame pool (560 boxes).
+  Re-ran on a Vast RTX 5090 (~6 s/epoch vs ~90 s CPU). Same recipe as ft1 (1024/40ep): ft3@201 best
+  **P 0.442 R 0.441 mAP50 0.234** (last 0.455/0.446/0.236) — *below* ft1@36's 0.466/0.446/0.252, a gap
+  inside 72-frame eval noise. ft2@201 (1280/60ep) 0.444/0.435/0.224 — overfit, no better. **5.6× more
+  labels added nothing.** Fine-tune gives a one-shot bump over baseline (recall 0.41→~0.45, mAP50
+  0.224→~0.24) then plateaus; 36 careful frames captured it all. **Imagery ceiling reasserts — the
+  step-change lever is belt LIGHTING (hardware), not more labels.** Keeper = `battery_ft1/best.pt`
+  (best mAP50, local; ft3 tied within noise). Box used was a shared 1×5090 (also runs STS2027) — do
+  NOT destroy it.
 - _Tracking sanity:_ TBD (run `track.py` once a deployable detector exists)
