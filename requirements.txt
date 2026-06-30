@@ -9,5 +9,11 @@ tqdm>=4.66
 ultralytics>=8.3.0        # YOLO11 detector + ByteTrack (pulls CPU torch locally)
 lapx>=0.5                 # linear-assignment solver ByteTrack needs (track.py)
 supervision>=0.22         # box/track visualization & dataset utils
+# --- Phase 2 OCR (ocr_crops.py) ---
+transformers>=4.49        # Qwen2-VL / Qwen2.5-VL vision-language OCR engine (default)
+qwen-vl-utils>=0.0.10     # image/message prep for the Qwen-VL processor
+accelerate>=0.30          # device_map for the VLM
+easyocr>=1.7              # classical OCR baseline (--engine easyocr); fails on this imagery
+# hf_transfer            # optional: resilient chunked HF download (throttle/drop workaround)
 # SAM pseudo-labeling runs on the GPU box; install there via vast/setup.sh:
 #   segment-anything @ git+https://github.com/facebookresearch/segment-anything.git

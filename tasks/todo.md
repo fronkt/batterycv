@@ -22,8 +22,23 @@ Full plan: `../.claude/plans/buzzing-tinkering-panda.md` (or repo `docs/` once c
 - [x] `track.py` — ByteTrack per-battery IDs over a run; export crops (DONE 2026-06-29)
 - [x] Push to GitHub (`fronkt/batterycv`, main) — initial scaffold live
 
+## Phase 2 — OCR on tracked crops (DONE 2026-06-30, see docs/ocr_findings.md)
+- [x] `ocr_crops.py` built (pluggable `--engine qwen|easyocr`; outputs ocr.json/ocr.csv/vis → Phase 3)
+- [x] EasyOCR baseline — **fails on this imagery** (4 garbage fragments across 6 crops); same
+  dark/low-contrast wall as detection. Kept as `--engine easyocr` for comparison.
+- [x] Engine decision (user): **local Qwen2-VL** (open VLM) — free/offline/reproducible
+- [x] Qwen2-VL-2B run on the 6 demo crops (laptop CPU, ~80s/crop) → structured fields. **Reads the
+  signal classical OCR can't:** brand (DELL, confirmed vs sticker), chemistry (Li-ion), all 6 crops'
+  cert marks (CE/WEEE/UL/RoHS), and a real part # (HP 727897-001). Fine specs (V/cap) lower-conf
+  (some real e.g. 11.55V/41Wh, some hallucinated) — small model invents plausible numbers; dense
+  micro-print still unread.
+- [x] Documented (docs/ocr_findings.md) + requirements updated (transformers/qwen-vl-utils/easyocr)
+- Note: HF unauth download throttling was the real friction; fixed via plain-HTTPS resume loop
+  (HF_HUB_DISABLE_XET=1). Bigger model (Qwen2.5-VL-3B/7B + --device cuda) lifts fine-field fidelity.
+
 ## Deferred (scaffolded only)
-- Step 2 OCR on tracked crops · Step 3 type classification (text vs image vs multimodal)
+- Step 3 type classification (text vs image vs multimodal) — consumes Phase-2 ocr.json (text
+  presence + brand/chemistry/marks). Scale Phase-2 OCR to all tracked crops first (GPU + bigger model).
 
 ## Review (fill in as steps complete)
 - _Data:_ delivered zip had a nested duplicate of the laptop folder inside mobile (366 exact
