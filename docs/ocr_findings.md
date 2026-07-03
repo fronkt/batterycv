@@ -59,8 +59,53 @@ need a bigger model and/or better imagery.
   **resume-on-retry loop** (`HF_HUB_DISABLE_XET=1`), which carried the 4.4 GB download through the
   drops. An HF token would remove the throttle entirely.
 
+## Scaled run — all 698 crops, Qwen2.5-VL-3B on GPU (2026-07-02)
+
+Pipeline: `track.py` over **all 103 runs** locally (CPU, ~35 min, 0 failures) → 698 best-conf
+crops pooled → `ocr_crops.py --engine qwen --model <local Qwen2.5-VL-3B> --device cuda` on a
+rented RTX 3090 → **698/698 records in 50 min (~4.3 s/crop)**. Results archived at
+`results/phase2_ocr/ocr.{json,csv}` (+ two evidence panels); full vis set in
+`batterycv-data/work/ocr_all/` locally.
+
+### Coverage vs. truth — the 3B scales the hallucination, it doesn't fix it
+Raw field coverage looks spectacular (chemistry/voltage/capacity ~98% non-empty) and is **not
+real**. Value distributions expose systematic prior-filling:
+
+- **chemistry**: "Li-ion" on **100 % of non-empty rows — including all 49 LiSO2 and all 98
+  Ni-Cd/Ni-MH crops** (0 % correct outside the Li-ion classes). It is a prior, not a read.
+- **voltage**: 94 % of claims are two default values (3.7 V ×465, 11.55 V ×194).
+- **capacity**: 2600 mAh ×377 (54 %), 41 Wh ×137.
+- Visual spot-checks confirm (panels in `results/phase2_ocr/`): a LiSO2 crop where the read
+  model # "38A" **matches visible print** while the claimed Li-ion/3.7V/2600mAh appears nowhere;
+  an IOTA Ni-Cd emergency pack with a fully legible dense label the 3B barely transcribed —
+  on such crops the *model*, not the imagery, is the limit.
+
+### Trust tier for Phase 3
+1. **Trustworthy:** `model`/part # (107 crops, 15 %) and `manufacturer` (99 crops, 14 % — Samsung,
+   Dell, Huawei, DEWALT, Canon, Panasonic, HP…). Hard to fake consistently; spot-checks match print.
+2. **Partially trustworthy:** `marks` (99 % non-empty; CE ×601 suggests some prior-filling too).
+3. **Do NOT use:** `chemistry`, `voltage`, `capacity` — prior-dominated. In particular, OCR
+   chemistry is **constant** ("Li-ion") and carries zero class signal.
+
+### Phase-3 implication + upgrade paths
+Type classification cannot lean on OCR chemistry/specs. Usable OCR-side features: text
+presence/density (`n_chars`), brand/part-# presence, mark count — combined with visual features.
+Paths to better fine fields, in rough order of value: (a) **7B model** (needs a box with ≥25 GB
+disk; the 16 GB shared boxes can't hold it), (b) transcribe-then-parse prompting (ask for a
+verbatim transcript first, parse fields from it — harder to prior-fill), (c) reject any
+voltage/capacity/chemistry not substringed in the raw transcript.
+
+### Infra notes (this run)
+- The rented box's egress to HF was flaky (TLS handshake timeouts); a snapshot_download attempt
+  even **exited 0 without the weight shards**. Fix: download on the laptop (model was already
+  cached), then ship the snapshot dir with a **resumable byte-offset loop** (`dd
+  iflag=skip_bytes,count_bytes skip=$(remote size) | ssh 'cat >>'` in 256 MB rounds) and gate on
+  **sha256 match**, not exit codes. Point `--model` at the local dir — no network at load time.
+- Tracking locally + shipping only crops (19 MB) beats staging 0.8 GB of frames onto a
+  disk-tight box that is also running other workloads.
+
 ## Next
-- Scale to **all** tracked crops (run `track.py` per run, then `ocr_crops.py --crops`), ideally on
-  GPU with a 3B/7B model for the fine fields.
-- Feed `ocr.json` (presence of text + brand/chemistry/marks) into **Phase 3** (text-only vs
-  text+image type classification).
+- **Phase 3 is unblocked**: 698 per-battery records with label/run/track ids at
+  `results/phase2_ocr/ocr.json`. Feature set per the trust tier above.
+- Optional fidelity pass: 7B + transcript-constrained prompting on the 206 crops with a
+  brand/part-# read, on a box with real disk.

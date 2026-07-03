@@ -36,9 +36,23 @@ Full plan: `../.claude/plans/buzzing-tinkering-panda.md` (or repo `docs/` once c
 - Note: HF unauth download throttling was the real friction; fixed via plain-HTTPS resume loop
   (HF_HUB_DISABLE_XET=1). Bigger model (Qwen2.5-VL-3B/7B + --device cuda) lifts fine-field fidelity.
 
-## Deferred (scaffolded only)
-- Step 3 type classification (text vs image vs multimodal) — consumes Phase-2 ocr.json (text
-  presence + brand/chemistry/marks). Scale Phase-2 OCR to all tracked crops first (GPU + bigger model).
+## Phase 2b — OCR at SCALE (DONE 2026-07-02, see docs/ocr_findings.md "Scaled run")
+- [x] `track.py` looped over ALL 103 runs locally (CPU, 0 failures) → **698 crops** pooled
+- [x] Qwen2.5-VL-3B (bf16, rented RTX 3090) over all 698 → **698/698 records, 50 min (~4.3 s/crop)**
+- [x] Results archived in-repo: `results/phase2_ocr/ocr.{json,csv}` + 2 evidence panels
+- [x] **Honest verdict: 3B scales the hallucination, doesn't fix it.** chemistry = "Li-ion" on
+  100% of non-empty rows incl. all LiSO2/NiCd/NiMH (constant → zero class signal); voltage 94%
+  ∈ {3.7V, 11.55V}; capacity 54% = 2600mAh. TRUST: model/part# (15%) + manufacturer (14%,
+  spot-checked vs print) > marks >> chemistry/V/cap (do NOT use in Phase 3).
+- [x] Infra: box HF egress flaky (one download attempt exited 0 with NO weight shards — gate on
+  artifacts+sha256, never exit codes); model shipped from laptop HF cache via resumable
+  dd-offset loop over ssh (256 MB rounds), loaded from local path (no network).
+
+## Phase 3 — type classification (UNBLOCKED, next up)
+- Input ready: 698 records (label/run_id/track_id/det_conf + fields) at `results/phase2_ocr/ocr.json`.
+- Features per trust tier: text density (`n_chars`), brand/part-# presence, mark count + visual
+  features. OCR chemistry/voltage/capacity are prior-dominated — excluded.
+- Optional fidelity pass first: 7B (needs ≥25 GB-disk box) or transcribe-then-parse prompting.
 
 ## Review (fill in as steps complete)
 - _Data:_ delivered zip had a nested duplicate of the laptop folder inside mobile (366 exact

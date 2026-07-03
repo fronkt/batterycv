@@ -16,3 +16,22 @@
 - Labels are **session-level (folder)**, not per-object. Every battery in a folder shares that
   folder's type — usable as a weak label, but detection/OCR have **no ground truth** (hence the
   small hand-verified eval set).
+
+## VLM OCR (Phase 2/2b)
+- **Coverage % is not accuracy.** Qwen2.5-VL-3B returned chemistry/voltage/capacity on ~98 % of
+  698 crops — and the value distributions showed it was prior-filling (chemistry literally
+  constant "Li-ion", incl. every LiSO2/NiCd/NiMH cell). Always check the **distribution of
+  values against known class truth** before treating a field as signal; "do not guess" prompts
+  are not obeyed at 2B–3B scale.
+- Trust in order: verbatim-looking strings (part #, brand) > symbols/marks > any field with a
+  plausible-default answer (V, mAh, chemistry).
+
+## Remote-box transfers / downloads
+- **Never trust a downloader's exit code — verify artifacts.** On a box with flaky HF egress,
+  `snapshot_download` exited 0 with zero weight shards on disk; a completion marker keyed on
+  exit code fired spuriously. Gate on file count + byte sizes + sha256 vs the source.
+- Long single-stream transfers die on cheap-box links. Resumable pattern without rsync on
+  Windows: `dd iflag=skip_bytes,count_bytes skip=$(remote byte size) count=256M | ssh 'cat >> f'`
+  in a loop until sizes match, then sha256 both ends.
+- Prefer shipping small derived artifacts (698 crops = 19 MB) over staging raw data onto
+  disk-tight shared boxes; run the heavy model where the disk is.
