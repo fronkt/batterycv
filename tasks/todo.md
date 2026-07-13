@@ -65,6 +65,20 @@ Full plan: `../.claude/plans/buzzing-tinkering-panda.md` (or repo `docs/` once c
 - Pipeline loop CLOSED: detect → track → OCR → classify all functional on this imagery.
 - Optional fidelity pass still parked: 7B (needs ≥25 GB-disk box) or transcribe-then-parse.
 
+## Wrap-up — package the finished pipeline (DONE 2026-07-13)
+- [x] `scripts/run_pipeline.py` — ONE command, frames → detect+track → classify type →
+  join trusted OCR metadata (brand/part#/marks from results/phase2_ocr by run+track id) →
+  annotated video (boxes colored by predicted chemistry, bin counts in header) +
+  per-battery `batteries.csv`. Two-pass render so every frame shows final types.
+- [x] Verified on 3 runs across chemistries: li_ion_laptop run4 **6/6** (part #s GT-10U /
+  LX6092 / B403XT overlaid), liso2 run60 **15/21** (0.71 ≈ the holdout LiSO2 recall 0.68;
+  misclassifications visibly lower-conf 0.54–0.88 vs ~1.00 correct — threshold story on
+  display), ni_cd_bulk run79 **9/9**. Demo agreement is illustrative — the honest numbers
+  remain the Phase-3 run-grouped holdout (runs here may overlap classifier training).
+- [x] Demo GIF (560px, 16 frames, 4.1 MB) → `results/demo/pipeline_demo.gif`.
+- [x] README rewritten: one-command demo up top + GIF, per-phase results table, the two
+  project-level lessons (lighting is the lever; VLM coverage ≠ accuracy), repro section.
+
 ## Review (fill in as steps complete)
 - _Data:_ delivered zip had a nested duplicate of the laptop folder inside mobile (366 exact
   dupes); quarantined. True dataset = 2,493 frames. See `lessons.md`.
