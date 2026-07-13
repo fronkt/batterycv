@@ -26,6 +26,20 @@
 - Trust in order: verbatim-looking strings (part #, brand) > symbols/marks > any field with a
   plausible-default answer (V, mAh, chemistry).
 
+## Tracking (Phase 1b / demos)
+- **IoU trackers silently drop objects smaller than the per-frame motion.** The belt moves
+  ~156 px/frame; any battery whose box is ≲160 px (ni_cd_small, ni_mh_all) moves its own
+  length between frames → consecutive-frame IoU ≈ 0 → ByteTrack tracks never confirm → no
+  ID, no crop, no box in the video (run 92: 41 raw detections → 1 unique id). The detector
+  was fine — the association was. Fix: **BoT-SORT with global motion compensation** (the
+  textured belt gives GMC a strong translation estimate) → run 92: 1 → 7 batteries.
+- The failure was invisible in aggregate metrics (96.6% agreement!) because the dropped
+  batteries never became rows. **Sanity-check COUNTS per class against the footage, not
+  just accuracy of what survived** — absence doesn't show up in accuracy.
+- Corollary: dense classes (li_ion_mobile, same ~167 px boxes) didn't collapse — neighbors
+  provided accidental IoU matches → inflated/ID-switched tracks instead. Counts from IoU
+  tracking on small fast objects are soft in both directions.
+
 ## Remote-box transfers / downloads
 - **Never trust a downloader's exit code — verify artifacts.** On a box with flaky HF egress,
   `snapshot_download` exited 0 with zero weight shards on disk; a completion marker keyed on

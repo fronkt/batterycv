@@ -26,7 +26,11 @@ with brand / part # under a battery when the OCR read one.*
 **Demo videos for all 103 capture runs** (annotated sorting-line view, one zip per chemistry)
 are on the [demo-videos-v1 release](https://github.com/fronkt/batterycv/releases/tag/demo-videos-v1),
 with `results/demo/all_runs_summary.csv` indexing per-run battery counts and type agreement
-(674/698 = 96.6% overall — includes training runs; the honest held-out numbers are the table above).
+(716/756 = 94.7% overall — includes training runs; the honest held-out numbers are the table above).
+Note the demo tracker is **BoT-SORT**: ByteTrack's IoU association silently drops batteries whose
+box (~160 px) is smaller than the belt's ~156 px/frame motion — ni_cd_small/ni_mh_all counted
+10/12 batteries instead of 49/31 until BoT-SORT's motion compensation bridged the gap (which is
+also why the demo counts 756 batteries vs. the 698-crop Phase-2 inventory; `tasks/lessons.md`).
 
 The two project-level lessons worth carrying beyond this repo: (1) every phase hit the same
 wall — dark, low-contrast imagery; the step-change lever is belt **lighting**, not more
