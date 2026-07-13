@@ -36,9 +36,34 @@ Full plan: `../.claude/plans/buzzing-tinkering-panda.md` (or repo `docs/` once c
 - Note: HF unauth download throttling was the real friction; fixed via plain-HTTPS resume loop
   (HF_HUB_DISABLE_XET=1). Bigger model (Qwen2.5-VL-3B/7B + --device cuda) lifts fine-field fidelity.
 
-## Deferred (scaffolded only)
-- Step 3 type classification (text vs image vs multimodal) — consumes Phase-2 ocr.json (text
-  presence + brand/chemistry/marks). Scale Phase-2 OCR to all tracked crops first (GPU + bigger model).
+## Phase 2b — OCR at SCALE (DONE 2026-07-02, see docs/ocr_findings.md "Scaled run")
+- [x] `track.py` looped over ALL 103 runs locally (CPU, 0 failures) → **698 crops** pooled
+- [x] Qwen2.5-VL-3B (bf16, rented RTX 3090) over all 698 → **698/698 records, 50 min (~4.3 s/crop)**
+- [x] Results archived in-repo: `results/phase2_ocr/ocr.{json,csv}` + 2 evidence panels
+- [x] **Honest verdict: 3B scales the hallucination, doesn't fix it.** chemistry = "Li-ion" on
+  100% of non-empty rows incl. all LiSO2/NiCd/NiMH (constant → zero class signal); voltage 94%
+  ∈ {3.7V, 11.55V}; capacity 54% = 2600mAh. TRUST: model/part# (15%) + manufacturer (14%,
+  spot-checked vs print) > marks >> chemistry/V/cap (do NOT use in Phase 3).
+- [x] Infra: box HF egress flaky (one download attempt exited 0 with NO weight shards — gate on
+  artifacts+sha256, never exit codes); model shipped from laptop HF cache via resumable
+  dd-offset loop over ssh (256 MB rounds), loaded from local path (no network).
+
+## Phase 3 — type classification (DONE 2026-07-03, see docs/type_classifier_findings.md)
+- [x] `train_type_classifier.py` — one script: run-grouped split → yolo11n-cls fine-tune →
+  one honest eval on held-out runs → OCR/visual/fusion ablation. 14 min on laptop CPU.
+- [x] **Group split by run id** (25 held-out runs / 199 crops vs 70 / 499), all 6 classes both
+  sides; minority train classes oversampled capped ×10 (1,424 train files).
+- [x] **RESULT: visual solves it — 6-way acc 0.874 / macro-F1 0.819, 4-way chemistry acc
+  0.899 / macro-F1 0.870** (majority baseline 0.603); best.pt == last.pt (converged, not a
+  lucky epoch). Weights `runs/classify/type_v1/` (gitignored).
+- [x] **Trust-tier vindicated downstream:** trusted-OCR-features-only LR = 0.206 (below
+  majority — brand/part# accurate but sparse/type-agnostic); fusion adds nothing (−0.5 pt).
+  OCR's role = per-item metadata, NOT the sorting decision.
+- [x] Weak spot: **LiSO2 recall 0.68** at P 1.00 (thinnest class by runs: 6). Levers: more
+  LiSO2 sessions > threshold/class-weight trade > lighting. li_ion clean at P/R 0.95/0.95.
+- [x] Artifacts archived: `results/phase3_type/metrics.{json},predictions.csv`; findings doc.
+- Pipeline loop CLOSED: detect → track → OCR → classify all functional on this imagery.
+- Optional fidelity pass still parked: 7B (needs ≥25 GB-disk box) or transcribe-then-parse.
 
 ## Review (fill in as steps complete)
 - _Data:_ delivered zip had a nested duplicate of the laptop folder inside mobile (366 exact
