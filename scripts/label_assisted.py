@@ -157,6 +157,13 @@ def main() -> None:
                          "object you are about to drop -- the HUD counts them and 'a' adopts "
                          "them. Without this the tool cannot show you what is MISSING, only "
                          "what the detector found.")
+    ap.add_argument("--no-prefill", action="store_true",
+                    help="Open every frame BLANK instead of pre-filling from the detector. Slower, "
+                         "and the only mode whose output can measure the detector: a label set "
+                         "seeded from the model scores that model ~1.0 by construction. Use this "
+                         "for any eval set.")
+    ap.add_argument("--limit", type=int, default=0,
+                    help="stop after N frames (with --order stratified, an even slice of classes)")
     ap.add_argument("--only-uncovered", action="store_true",
                     help="With --ref: visit ONLY the frames that have a reference box no saved "
                          "box covers. Turns a full re-pass into just the frames in dispute, and "
@@ -169,14 +176,21 @@ def main() -> None:
     images = sorted(img_dir.glob("*.jpg"))
     if args.order == "stratified":
         images = stratify(images)
+    if args.limit:
+        images = images[:args.limit]
     if not images:
         sys.exit(f"no images in {img_dir} (run build_label_pool.py first)")
-    if not Path(args.weights).exists():
-        sys.exit(f"weights not found: {args.weights}")
 
-    from ultralytics import YOLO
-    print(f"loading detector {args.weights} ...")
-    model = YOLO(args.weights)
+    model = None
+    if not args.no_prefill:
+        if not Path(args.weights).exists():
+            sys.exit(f"weights not found: {args.weights}")
+        from ultralytics import YOLO
+        print(f"loading detector {args.weights} ...")
+        model = YOLO(args.weights)
+    else:
+        print("--no-prefill: frames open BLANK, detector never loaded. "
+              "This is the only mode whose labels can measure the detector.")
 
     state = {"drawing": False, "p0": None, "cur": None, "del": None}
     boxes: list[list[int]] = []
@@ -225,10 +239,15 @@ def main() -> None:
         h, w = img.shape[:2]
         lp = yolo_path(labels_dir, img_path)
         prefilled = not lp.exists()
-        boxes[:] = predict_boxes(model, img, args.conf, args.imgsz) if prefilled \
-            else load_boxes(lp, w, h)
+        if not prefilled:
+            boxes[:] = load_boxes(lp, w, h)
+        elif model is None:                       # --no-prefill: draw it yourself
+            boxes[:] = []
+        else:
+            boxes[:] = predict_boxes(model, img, args.conf, args.imgsz)
         start = [list(b) for b in boxes]
         ref = load_boxes(yolo_path(ref_dir, img_path), w, h) if ref_dir else []
+        hint = ""
 
         while True:
             disp = img.copy()
@@ -240,9 +259,13 @@ def main() -> None:
                 cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 0), 2)
             if state["drawing"] and state["p0"] and state["cur"]:
                 cv2.rectangle(disp, state["p0"], state["cur"], (0, 200, 255), 1)
-            tag = "PRE-FILLED (detector)" if prefilled else "saved"
+            tag = ("BLANK - draw them yourself" if model is None else "PRE-FILLED (detector)") \
+                if prefilled else "saved"
             cv2.putText(disp, f"{i+1}/{len(images)}  {img_path.name}  boxes={len(boxes)}  [{tag}]",
                         (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2, cv2.LINE_AA)
+            if hint:
+                cv2.putText(disp, hint, (10, 84), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 165, 255), 2,
+                            cv2.LINE_AA)
             if miss:
                 cv2.putText(disp, f"{len(miss)} REFERENCE BOX(ES) UNCOVERED  -  'a' adopts, or "
                             f"draw/ignore deliberately", (10, 58), cv2.FONT_HERSHEY_SIMPLEX,
@@ -266,7 +289,10 @@ def main() -> None:
             if k == ord("c"):
                 boxes.clear()
             if k == ord("r"):                              # re-run detector, discard edits
-                boxes[:] = predict_boxes(model, img, args.conf, args.imgsz); prefilled = True
+                if model is None:                          # never show the detector in blank mode
+                    hint = "--no-prefill: the detector is deliberately not available here"
+                else:
+                    boxes[:] = predict_boxes(model, img, args.conf, args.imgsz); prefilled = True
             if k in (ord("q"), 27):
                 commit()
                 cv2.destroyAllWindows()
