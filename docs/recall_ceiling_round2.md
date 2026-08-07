@@ -147,6 +147,15 @@ flat-fielding corrects a real 1.89× centre/corner vignette but lowers recall, p
 CLAHE at grid=8 already equalizes locally. **All 10 temporal variants covered zero GT objects the
 baseline misses.** `scripts/probe_temporal.py`.
 
+**Inference resolution — no new objects.** Every inference had been downscaling the 1280x1024
+frames to imgsz 1024, and object size predicts failure (covered objects median min-side 184 px,
+total misses 128 px), so running the frozen ft1 at native 1280 looked promising. It moves recall
+@IoU0.5 from 0.452 to 0.457 — and moves recall @IoU0.3 and centre-in-GT by **exactly nothing**
+(0.790 and 0.839 in both cases). It finds no object it was not already finding; it only tightens
+boxes fractionally. Note the two convention-free columns being *identical* is itself a useful
+signal: it says the remaining gap is not about what the network can resolve.
+`scripts/probe_inference_scale.py`.
+
 ## Belt physics, re-verified (and one correction to this round's own work)
 
 Objects **ride the belt and translate with it** — pure horizontal, ~100–150 px/frame, per-run

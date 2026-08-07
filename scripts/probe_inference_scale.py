@@ -115,6 +115,10 @@ def main() -> None:
     ap.add_argument("--eval-conf", type=float, default=0.25)
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--only", default=None,
+                    help="comma-separated substrings; run only configs whose name matches. "
+                         "Tiling is ~4-9x the inference cost of a plain pass, so it is often "
+                         "worth running on its own rather than losing a whole sweep to a timeout.")
     ap.add_argument("--out", default=str(repo / "results/phase4/inference_scale.json"))
     args = ap.parse_args()
 
@@ -136,6 +140,12 @@ def main() -> None:
         ("tile2x2 @1024", {"kind": "tile", "grid": 2, "imgsz": 1024}),
         ("tile3x3 @1024", {"kind": "tile", "grid": 3, "imgsz": 1024}),
     ]
+
+    if args.only:
+        want = [s.strip() for s in args.only.split(",") if s.strip()]
+        configs = [(n, c) for n, c in configs if any(w in n for w in want)]
+        if not configs:
+            sys.exit(f"--only {args.only!r} matched no config")
 
     results = {}
     for name, cfg in configs:
