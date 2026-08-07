@@ -84,6 +84,40 @@ def predict_boxes(model, img, conf, imgsz):
     return [[int(a), int(b), int(c), int(d)] for a, b, c, d in r.boxes.xyxy.cpu().numpy()]
 
 
+def iou(a, b) -> float:
+    ax1, ay1, ax2, ay2 = min(a[0], a[2]), min(a[1], a[3]), max(a[0], a[2]), max(a[1], a[3])
+    bx1, by1, bx2, by2 = min(b[0], b[2]), min(b[1], b[3]), max(b[0], b[2]), max(b[1], b[3])
+    iw, ih = max(0, min(ax2, bx2) - max(ax1, bx1)), max(0, min(ay2, by2) - max(ay1, by1))
+    inter = iw * ih
+    union = (ax2 - ax1) * (ay2 - ay1) + (bx2 - bx1) * (by2 - by1) - inter
+    return inter / union if union > 0 else 0.0
+
+
+def unmatched(ref, boxes, thr=0.3):
+    """Reference boxes with no editable box over `thr` IoU — i.e. objects about to be dropped."""
+    return [r for r in ref if all(iou(r, b) < thr for b in boxes)]
+
+
+def report(labels_dir: Path, images, seen: dict) -> None:
+    """Say plainly how much of this pass was YOUR judgement vs the detector's.
+
+    A frame saved byte-identical to the detector's pre-fill contributes nothing independent: a
+    label set made only of those scores the detector at ~100% recall against itself, which looks
+    like a triumph and means nothing. This prints the ratio while you can still act on it.
+    """
+    done = len(list(labels_dir.glob("*.txt")))
+    touched = len(seen)
+    untouched = sum(1 for v in seen.values() if v)
+    print(f"\n{done}/{len(images)} frames labeled -> {labels_dir}")
+    if touched:
+        print(f"this session: {touched} frames saved, {untouched} of them EXACTLY as the "
+              f"detector pre-filled them")
+        if untouched >= 0.8 * touched:
+            print("  ^ that is a circular label set. Recall measured against it is ~1.0 by\n"
+                  "    construction. Re-run with --ref <old labels> so dropped objects are\n"
+                  "    visible, and adopt or redraw them before trusting any number from it.")
+
+
 def box_under(boxes, x, y):
     """Index of the smallest box containing (x,y), else nearest center within 40 px, else None."""
     contain = []
@@ -114,6 +148,12 @@ def main() -> None:
     ap.add_argument("--order", choices=("name", "stratified"), default="name",
                     help="stratified: round-robin over the class prefix, so a partial pass "
                          "covers every class instead of exhausting one. Use for a pilot.")
+    ap.add_argument("--ref", default=None,
+                    help="A second label dir drawn as read-only RED reference (e.g. the old "
+                         "labels when writing a v2). A red box with no green box over it is an "
+                         "object you are about to drop -- the HUD counts them and 'a' adopts "
+                         "them. Without this the tool cannot show you what is MISSING, only "
+                         "what the detector found.")
     args = ap.parse_args()
 
     img_dir = Path(args.images)
@@ -152,6 +192,9 @@ def main() -> None:
     cv2.namedWindow(WIN, cv2.WINDOW_NORMAL)
     cv2.setMouseCallback(WIN, on_mouse)
 
+    ref_dir = Path(args.ref) if args.ref else None
+    seen: dict[str, bool] = {}          # stem -> was it saved exactly as pre-filled?
+
     i = 0
     while 0 <= i < len(images):
         img_path = images[i]
@@ -161,9 +204,15 @@ def main() -> None:
         prefilled = not lp.exists()
         boxes[:] = predict_boxes(model, img, args.conf, args.imgsz) if prefilled \
             else load_boxes(lp, w, h)
+        start = [list(b) for b in boxes]
+        ref = load_boxes(yolo_path(ref_dir, img_path), w, h) if ref_dir else []
 
         while True:
             disp = img.copy()
+            miss = unmatched(ref, boxes)
+            for (x1, y1, x2, y2) in ref:                       # read-only reference
+                dim = (0, 0, 255) if [x1, y1, x2, y2] in miss else (90, 90, 160)
+                cv2.rectangle(disp, (x1, y1), (x2, y2), dim, 1, cv2.LINE_AA)
             for (x1, y1, x2, y2) in boxes:
                 cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 0), 2)
             if state["drawing"] and state["p0"] and state["cur"]:
@@ -171,14 +220,24 @@ def main() -> None:
             tag = "PRE-FILLED (detector)" if prefilled else "saved"
             cv2.putText(disp, f"{i+1}/{len(images)}  {img_path.name}  boxes={len(boxes)}  [{tag}]",
                         (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2, cv2.LINE_AA)
+            if miss:
+                cv2.putText(disp, f"{len(miss)} REFERENCE BOX(ES) UNCOVERED  -  'a' adopts, or "
+                            f"draw/ignore deliberately", (10, 58), cv2.FONT_HERSHEY_SIMPLEX,
+                            0.62, (0, 0, 255), 2, cv2.LINE_AA)
             cv2.imshow(WIN, disp)
             k = cv2.waitKey(20) & 0xFF
+            if k == ord("a") and miss:
+                boxes.extend([list(m) for m in miss])
+            def commit():
+                save_boxes(lp, boxes, w, h)
+                seen[img_path.stem] = prefilled and boxes == start
+
             if k in (ord("n"), ord(" "), 83):
-                save_boxes(lp, boxes, w, h); i += 1; break
+                commit(); i += 1; break
             if k in (ord("p"), 81):
-                save_boxes(lp, boxes, w, h); i -= 1; break
+                commit(); i -= 1; break
             if k == ord("s"):
-                save_boxes(lp, boxes, w, h); prefilled = False
+                commit(); prefilled = False
             if k == ord("u") and boxes:
                 boxes.pop()
             if k == ord("c"):
@@ -186,14 +245,12 @@ def main() -> None:
             if k == ord("r"):                              # re-run detector, discard edits
                 boxes[:] = predict_boxes(model, img, args.conf, args.imgsz); prefilled = True
             if k in (ord("q"), 27):
-                save_boxes(lp, boxes, w, h)
+                commit()
                 cv2.destroyAllWindows()
-                done = len(list(labels_dir.glob("*.txt")))
-                print(f"saved. {done}/{len(images)} frames labeled -> {labels_dir}")
+                report(labels_dir, images, seen)
                 return
     cv2.destroyAllWindows()
-    done = len(list(labels_dir.glob("*.txt")))
-    print(f"done. {done}/{len(images)} frames labeled -> {labels_dir}")
+    report(labels_dir, images, seen)
 
 
 if __name__ == "__main__":
