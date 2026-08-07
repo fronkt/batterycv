@@ -23,9 +23,12 @@ lighting or hardware change.
     python scripts/adjudicate_boxes.py --report   # scores what you have judged so far, no GUI
 
 Keys:  1 = the CYAN box is the better box      2 = the MAGENTA box is the better box
-       3 = neither -- this is not a battery, or both boxes are wrong
-       y / n = (single-box cases) yes there is a battery here / no there is not
-       u = undo last verdict     s = skip for now     q = save + quit
+       3 / n = neither -- this is not a battery, or both boxes are wrong
+       y = (single-box cases) yes, there is a battery here      n / 3 = no, there is not
+       p = back one case      s = forward one case      g = jump to next unjudged
+       u = undo the last verdict and return to that case        q = save + quit
+Navigation covers every case, judged or not, so you can revisit and change an answer -- the
+current answer is shown on screen and any key overwrites it.
 """
 from __future__ import annotations
 
@@ -202,9 +205,11 @@ def main() -> None:
         return
 
     cv2.namedWindow(WIN, cv2.WINDOW_AUTOSIZE)
-    order = [c for c in cases if c["id"] not in verdicts]
+    # Walk EVERY case, not just the unjudged ones, so 'p' can reach a case you already answered
+    # and change it. Start on the first unanswered one; a case that has a verdict shows it.
+    order = cases
     history: list[str] = []
-    i = 0
+    i = next((n for n, c in enumerate(order) if c["id"] not in verdicts), 0)
     while 0 <= i < len(order):
         case = order[i]
         img = cv2.imread(str(img_dir / f"{case['stem']}.jpg"))
@@ -214,16 +219,25 @@ def main() -> None:
                 f"here)  -  is there a battery?   y=yes   n/3=no") if single else \
                (f"{i+1}/{len(order)}  {case['cls']}   IoU {case['best_iou']:.2f}  -  which box "
                 f"is better?   1=cyan   2=magenta   3/n=neither")
+        nav = f"p=back  s=forward  g=next unjudged  u=undo  q=quit   [{len(verdicts)}/{len(order)} judged]"
         hint = ""
         while True:
             disp = view.copy()
-            cv2.rectangle(disp, (0, 0), (disp.shape[1], 34), (0, 0, 0), -1)
-            cv2.putText(disp, head, (8, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.58, (255, 255, 255), 1,
+            prior = verdicts.get(case["id"])
+            cv2.rectangle(disp, (0, 0), (disp.shape[1], 58), (0, 0, 0), -1)
+            cv2.putText(disp, head, (8, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.58, (255, 255, 255), 1,
                         cv2.LINE_AA)
+            cv2.putText(disp, nav, (8, 48), cv2.FONT_HERSHEY_SIMPLEX, 0.46, (170, 170, 170), 1,
+                        cv2.LINE_AA)
+            if prior:
+                cv2.rectangle(disp, (0, 58), (disp.shape[1], 86), (0, 0, 0), -1)
+                cv2.putText(disp, f"already answered: {prior}  -  press a key to change it",
+                            (8, 78), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 0), 1, cv2.LINE_AA)
             if hint:
-                cv2.rectangle(disp, (0, 34), (disp.shape[1], 64), (0, 0, 0), -1)
-                cv2.putText(disp, hint, (8, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 165, 255),
-                            1, cv2.LINE_AA)
+                y0 = 86 if prior else 58
+                cv2.rectangle(disp, (0, y0), (disp.shape[1], y0 + 28), (0, 0, 0), -1)
+                cv2.putText(disp, hint, (8, y0 + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.55,
+                            (0, 165, 255), 1, cv2.LINE_AA)
             cv2.imshow(WIN, disp)
             k = cv2.waitKey(20) & 0xFF
             v = None
@@ -242,12 +256,25 @@ def main() -> None:
                 # a dead keypress reads as a frozen window.
                 hint = ("this case has only one box -- press y or n"
                         if single else "this case has two boxes -- press 1, 2 or 3")
-            elif k == ord("s"):
-                i += 1
+            elif k in (ord("s"), 83):                       # forward, leaving the answer alone
+                i = min(i + 1, len(order) - 1)
                 break
-            elif k == ord("u") and history:
-                verdicts.pop(history.pop(), None)
-                i = max(0, i - 1)
+            elif k in (ord("p"), 81):                       # back, leaving the answer alone
+                i = max(i - 1, 0)
+                break
+            elif k == ord("g"):                            # skip ahead to the next unanswered
+                nxt = next((n for n in range(i + 1, len(order))
+                            if order[n]["id"] not in verdicts), None)
+                if nxt is None:
+                    hint = "no unjudged case after this one"
+                else:
+                    i = nxt
+                    break
+            elif k == ord("u") and history:                # undo: erase the answer AND go to it
+                last = history.pop()
+                verdicts.pop(last, None)
+                persist()
+                i = next((n for n, c in enumerate(order) if c["id"] == last), max(i - 1, 0))
                 break
             elif k in (ord("q"), 27):
                 persist()
