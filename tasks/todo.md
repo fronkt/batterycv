@@ -259,6 +259,40 @@ What actually has headroom is using time against **sensor noise**, not against m
 - [ ] Learned low-light enhancement (Zero-DCE class, self-supervised, no paired GT) if C shows
   preprocessing has real headroom.
 
-### Review
-- [ ] Verdict + numbers land in `docs/recall_ceiling_round2.md`, and the honest outcome
-  (including "no compute lever works") goes to Chen either way.
+### Review (2026-08-06) — the question changed underneath the plan
+
+The plan above asks "which compute lever raises recall". The diagnostic that was supposed to
+*aim* that search answered a different and more important question first: **the ~0.45 ceiling is
+substantially the ruler, not the imagery.** Full writeup in `docs/recall_ceiling_round2.md`;
+`docs/recall_ceiling_findings.md` now carries a superseded banner.
+
+- [x] Miss taxonomy (`analyze_misses.py`): only **5.9%** of the 186 GT boxes are genuine total
+  misses (IoU<0.1); 32.8% are near-misses at IoU 0.3-0.5. Recall would be 0.817 if near-misses
+  alone were fixed.
+- [x] Threshold sensitivity (`probe_gt_audit.py`): recall 0.452 @IoU0.5 → **0.790 @IoU0.3**;
+  convention-free centre-in-GT = **0.839**. Every class shows a 15-48 pt gap.
+- [x] Blind audit, 3 independent judges, not told which box source was which: **34/36 panels
+  favour the DETECTOR's box** over the ground truth (91.7% unanimous, sign-test p≈2e-9).
+  Visibility 96 "obvious" / 12 "subtle" / **0 "invisible"** out of 108 ratings; all 30 ni_mh_all
+  ratings "obvious" — the class documented as "essentially invisible".
+- [x] Contrast (`contrast_detboxes.json`): measured in TIGHT detector boxes, contrast is
+  **anti-correlated** with recall (ni_mh 6.6σ → recall .08; ni_cd_bulk 2.1σ → recall .875).
+- [x] Track A temporal — **clean negative.** Stacking is a low-pass filter, not a denoiser (object
+  edge SNR ×0.97→×0.66) because of 13 px residual misregistration, not interpolation. Flat-field
+  corrects a real 1.89× vignette but lowers recall. All 10 variants: **zero** new GT covered.
+- [x] Box-scale correction — **clean negative**, and a good reminder to hold out even for a
+  one-parameter fix (+0.006 in-sample, −0.011/−0.053 held out).
+- [x] Matcher adversarially reviewed; AP@0.5 verified exact; 6 bugs fixed; divergence from the
+  original `probe_labeler.match` bounded at +0.0019 recall, so Phase-4 and published numbers
+  are comparable.
+- [ ] **BLOCKED, and deliberately so — Tracks B (ensemble), C (preprocessing) and the inference
+  resolution/tiling sweep are built and smoke-tested but NOT run to conclusions.** Running them
+  to three decimals against labels now known to be the binding error would repeat exactly the
+  round-1 mistake. They are cheap to run the moment the eval set is re-labeled.
+- [ ] **The one action everything else waits on: re-label the 72 eval frames to a WRITTEN box
+  convention, by a human.** Minimum spec: does an attached wire/connector belong inside the box
+  (the most common single disagreement); how are touching cells separated; how are frame-clipped
+  objects handled.
+- [ ] Only after re-measuring: revisit whether the residual 5.9% total-miss population justifies
+  a hardware/lighting ask. That population is the only evidence that could still support one, and
+  the blind audit is structurally blind to it (no detector box ⇒ no panel to judge).
