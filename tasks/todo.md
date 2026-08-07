@@ -176,3 +176,69 @@ Full plan: `../.claude/plans/buzzing-tinkering-panda.md` (or repo `docs/` once c
   Completes Phase-1 detect→track. Default weights = `battery_ft1/best.pt`. ID counter does fragment
   a bit on the dark classes (re-id when a cell is briefly lost) — fine on laptop/ni_cd_bulk; same
   imagery limit as detection elsewhere.
+
+## Phase 4 — recall ceiling, round 2: the compute-only levers (2026-08-06)
+
+Context: every lever tried in Phase 1 was a variation on ONE family — single-frame, static,
+absolute-brightness detection (SAM / YOLO-World / YOLO11 at 3 resolutions, 2 backbones,
+36 and 201 hand-labeled frames). All hit the same ~0.45 recall wall, and the doc concluded the
+only remaining lever is belt **lighting** (hardware). That conclusion is correct *for that
+family*. It was never tested against methods that use information the family throws away:
+**time** (the belt moves), **model disagreement** (5 trained checkpoints sit unused on disk),
+and **the preprocessing itself** (CLAHE's clip/grid were never swept — every sweep held them fixed).
+
+Goal: determine whether any compute-only lever moves recall on the two classes that carry the
+whole deficit (`ni_mh_all` 0.12, `li_ion_mobile` 0.45) BEFORE asking Chen for a lighting rig.
+Deliverable either way is a defensible answer: a working lever, or evidence that closes the
+question so the hardware ask is backed by more than one family of experiments.
+
+### Ground rules
+- [x] One shared matcher for every probe — `batterycv/evalutil.py` (greedy IoU-0.5, the same
+  semantics as `probe_labeler.py` that produced the published tables). No probe rolls its own.
+- [x] Harness gated against published ft1 before use — `scripts/validate_harness.py`:
+  R 0.452 vs published 0.446, AP@0.5 0.233 vs mAP50 0.252, per-class pattern reproduced
+  (ni_mh 0.12, mobile 0.45). Precision reads lower (0.410 vs 0.466) only because Ultralytics
+  reports P at best-F1, not at a fixed conf. Comparisons are therefore trustworthy.
+- Report **per-class** recall always. Aggregate accuracy hid the ByteTrack drop-out for weeks
+  (see lessons.md); it will hide this too.
+- Complementarity (does method X cover objects the detector misses?) is the decisive question,
+  not X's standalone recall. A method with 0.30 recall that covers a *disjoint* 0.30 is worth
+  more than one with 0.45 that covers the same objects.
+
+### A — motion / temporal candidate generation
+- [ ] `scripts/probe_motion.py`. Belt moves ~156 px/frame at 4 fps; frames are 0.25 s apart and
+  all 72 eval frames have in-run temporal neighbors (verified). Estimate global belt translation
+  (phase correlation / ECC), warp neighbor onto reference, threshold the residual → candidate
+  boxes. Signal is "moved differently from the belt", which is independent of absolute contrast —
+  the exact axis on which the dark classes fail.
+- [ ] Test on RAW frames as well as CLAHE'd: CLAHE is per-frame adaptive, so it can map the same
+  physical region differently across frames and inject residual noise. Raw may difference cleaner.
+- [ ] Report standalone per-class recall ceiling AND union-with-ft1 recall (the payoff metric).
+
+### B — ensemble of the checkpoints already on disk
+- [ ] `scripts/probe_ensemble.py`. 5 checkpoints exist (`battery_yolo11` SAM-trained,
+  `battery_yolo11_yw` YOLO-World-trained, `battery_yw_s1280`, `battery_ft1`, `battery_ft3`).
+  They were only ever compared and the winner kept — never fused. Different pseudo-labelers →
+  different failure modes → plausibly different misses. Fuse with WBF/NMS, sweep the fusion
+  params. Zero training cost.
+- [ ] Report the oracle union recall too: the ceiling any fusion rule could reach.
+
+### C — preprocessing sweep (the untuned knob)
+- [ ] `scripts/probe_preprocess.py`. `normalize_illumination` is CLAHE clip=2.5 grid=8, fixed
+  since day one and never swept. Test clip/grid variants, gamma, multi-scale Retinex, unsharp.
+- [ ] Caveat to respect: the detector was TRAINED on clip=2.5/grid=8, so changing inference
+  preprocessing risks train/test mismatch and may cost recall. Interpret a drop as mismatch,
+  not as evidence the variant is bad — and check the zero-shot labeler (no mismatch) separately.
+
+### D — deferred, needs GPU (spec only, not run this round)
+- [ ] Synthetic hard-example augmentation: composite bright crops from the strong classes onto
+  real belt at reduced contrast to manufacture the diagnosed failure mode, instead of buying
+  more real labels (which plateaued at 36 frames).
+- [ ] Segmentation head (yolo11n-seg, bootstrapped from the Phase-1 SAM masks): misses cluster at
+  IoU 0.3-0.49, so tighter boundary fitting could push near-misses over the 0.5 bar.
+- [ ] Learned low-light enhancement (Zero-DCE class, self-supervised, no paired GT) if C shows
+  preprocessing has real headroom.
+
+### Review
+- [ ] Verdict + numbers land in `docs/recall_ceiling_round2.md`, and the honest outcome
+  (including "no compute lever works") goes to Chen either way.
