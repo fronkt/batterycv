@@ -40,6 +40,37 @@
   provided accidental IoU matches → inflated/ID-switched tracks instead. Counts from IoU
   tracking on small fast objects are soft in both directions.
 
+## Evaluation / metrics (Phase 4, 2026-08-06)
+- **A metric can only be as good as its ground truth, and nobody audits the ground truth.**
+  The eval set's 186 boxes were drawn through a vision model, not by a metrologist. Scoring the
+  detector against them at IoU 0.5 produced a "0.45 recall ceiling" that drove ~4 weeks of work
+  and a hardware recommendation. Loosening only the IoU threshold (0.5→0.3) raises recall
+  0.452→0.790; asking the convention-free question "is a detection's centre inside the GT box"
+  gives 0.839. The detector was finding the batteries all along.
+- **Look at the failures as images before theorising about them.** One contact sheet of
+  near-misses showed the pattern instantly (GT boxes loose/oversized/offset, detector boxes
+  tight and correct) — something no aggregate table over 4 weeks had surfaced. Same lesson as
+  the ByteTrack drop-out, one level up: aggregates hide the mechanism.
+- **Check whether the proposed cause correlates with the effect before spending on the cure.**
+  The documented root cause was "dark bodies blend into the dark belt". Measured object-vs-belt
+  contrast inside tight detector boxes is *anti*-correlated with recall: ni_mh_all 6.6σ and
+  ni_cd_small 10.7σ (the two highest-contrast classes) have the worst recall, while ni_cd_bulk
+  2.1σ and li_ion_laptop 3.2σ (the lowest) have the best. One cheap plot would have falsified
+  the darkness story before the lighting ask was drafted.
+- **Measure photometry inside TIGHT boxes.** Contrast measured inside the loose GT boxes read
+  ~15-18 grey levels because the boxes included belt; measured inside tight detector boxes the
+  same objects read 35-56 for the small-cell classes. A loose box silently dilutes any
+  appearance statistic computed from it.
+- **Fit-then-test, even for a one-parameter "fix".** A global box-scale correction looked like a
+  free win in-sample (best scale 1.10, +0.006 recall). Fitting the scale on half the frames and
+  scoring the other half gave −0.011 and −0.053 — it was fitting noise. One-parameter fixes feel
+  too small to need a held-out split; they aren't.
+- **Validate a shift estimate against object displacement, not whole-frame residual.** Brute-force
+  minimising whole-frame mean absdiff said the belt was static (dx*≈0) and nearly produced a
+  confident "the 156 px/frame figure is an artifact" claim. The belt genuinely moves ~100-150
+  px/frame — detected box centroids march 1212→1070→919→764. The belt is near-featureless and
+  objects cover a tiny area fraction, so whole-frame residual is insensitive to the true shift.
+
 ## Remote-box transfers / downloads
 - **Never trust a downloader's exit code — verify artifacts.** On a box with flaky HF egress,
   `snapshot_download` exited 0 with zero weight shards on disk; a completion marker keyed on
