@@ -205,15 +205,35 @@ question so the hardware ask is backed by more than one family of experiments.
   not X's standalone recall. A method with 0.30 recall that covers a *disjoint* 0.30 is worth
   more than one with 0.45 that covers the same objects.
 
-### A — motion / temporal candidate generation
-- [ ] `scripts/probe_motion.py`. Belt moves ~156 px/frame at 4 fps; frames are 0.25 s apart and
-  all 72 eval frames have in-run temporal neighbors (verified). Estimate global belt translation
-  (phase correlation / ECC), warp neighbor onto reference, threshold the residual → candidate
-  boxes. Signal is "moved differently from the belt", which is independent of absolute contrast —
-  the exact axis on which the dark classes fail.
-- [ ] Test on RAW frames as well as CLAHE'd: CLAHE is per-frame adaptive, so it can map the same
-  physical region differently across frames and inject residual noise. Raw may difference cleaner.
-- [ ] Report standalone per-class recall ceiling AND union-with-ft1 recall (the payoff metric).
+### A — temporal / multi-frame (NOT motion detection — see the physics correction below)
+Belt motion re-measured from scratch 2026-08-06, because the whole track depends on it:
+- Objects **ride the belt and translate with it** — pure horizontal, dy≈0, and per-run speed
+  varies ~30-220 px/frame (not one constant). Measured by tracking detected box centroids:
+  run 92 x = 1212→1070→919→764 (~145 px/f), run 4 x = 1067→967→816→664 (~100-150 px/f).
+  The ~156 px/frame in `lessons.md` is **confirmed correct**.
+- **Consequence: a naive moving-object detector cannot work here.** Objects and belt move
+  together, so motion-compensated differencing cancels both. The original framing of this
+  track ("find what moves differently from the belt") was wrong and is retracted.
+- Method gotcha worth keeping: brute-force searching the shift that minimises WHOLE-FRAME mean
+  absdiff returns ~0 and is flatly wrong — the belt is near-featureless and objects cover a tiny
+  area fraction, so that average is insensitive to the true shift. It briefly produced a
+  confident "the scene is static, the 156 px/frame figure is an artifact" conclusion that the
+  object-centroid check demolished. Estimate shift on high-gradient pixels or by phase
+  correlation, and always validate against object displacement.
+
+What actually has headroom is using time against **sensor noise**, not against motion:
+- [ ] `scripts/probe_temporal.py`, idea A1 — **motion-aligned temporal stacking.** In
+  belt-aligned coordinates the scene is static, so warping k in-run neighbors onto the eval
+  frame and averaging is pure denoising: measured per-pixel temporal σ ≈ 5.3/255, cut by √k.
+  Against a battery-vs-belt contrast of only a few grey levels that is a plausible part of the
+  real detection limit. Costs image margin (~150 px per stacked frame) — track a valid-count
+  mask and report the degraded area.
+- [ ] idea A2 — **temporal-median flat-field.** In camera coordinates (no alignment) the belt
+  slides past, so a per-pixel median over a run approximates the *static* components: vignetting
+  ("bright center / dark corners", per `preprocess.py`), fixed-pattern noise, lens dirt, mean
+  belt level. Divide it out, renormalize, then CLAHE. Standard flat-fielding, independent of A1.
+- [ ] Report standalone per-class recall ceiling AND union-with-ft1 coverage (the payoff metric):
+  a method that re-finds the same objects is worthless even at equal recall.
 
 ### B — ensemble of the checkpoints already on disk
 - [ ] `scripts/probe_ensemble.py`. 5 checkpoints exist (`battery_yolo11` SAM-trained,
