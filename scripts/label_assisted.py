@@ -107,11 +107,14 @@ def report(labels_dir: Path, images, seen: dict) -> None:
     """
     done = len(list(labels_dir.glob("*.txt")))
     touched = len(seen)
+    # Count frames saved byte-identical to what LOADED, whether that came from the detector or
+    # from a previous pass. Keying this on "was pre-filled" made every resumed frame report as
+    # edited, which is the opposite of the warning's purpose.
     untouched = sum(1 for v in seen.values() if v)
-    print(f"\n{done}/{len(images)} frames labeled -> {labels_dir}")
+    print(f"\n{done} frames labeled in {labels_dir} ({len(images)} in this pass)")
     if touched:
-        print(f"this session: {touched} frames saved, {untouched} of them EXACTLY as the "
-              f"detector pre-filled them")
+        print(f"this session: {touched} frames saved, {untouched} of them UNCHANGED from what "
+              f"was on screen when the frame opened")
         if untouched >= 0.8 * touched:
             print("  ^ that is a circular label set. Recall measured against it is ~1.0 by\n"
                   "    construction. Re-run with --ref <old labels> so dropped objects are\n"
@@ -250,7 +253,7 @@ def main() -> None:
                 boxes.extend([list(m) for m in miss])
             def commit():
                 save_boxes(lp, boxes, w, h)
-                seen[img_path.stem] = prefilled and boxes == start
+                seen[img_path.stem] = boxes == start
 
             if k in (ord("n"), ord(" "), 83):
                 commit(); i += 1; break
