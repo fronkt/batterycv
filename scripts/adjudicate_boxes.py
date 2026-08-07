@@ -46,6 +46,10 @@ from batterycv.evalutil import CLASSES, class_of, iou_mat, load_gt
 WIN = "adjudicate  [1=cyan better  2=magenta better  3=neither  y/n  u=undo  s=skip  q=quit]"
 CYAN, MAGENTA = (255, 255, 0), (255, 0, 255)
 MATCH_IOU = 0.5
+# Below this the detector's nearest box is around a DIFFERENT object, so "which box is better"
+# has no answer -- it becomes the single-box question instead. 0.1 is the same threshold the
+# miss taxonomy in analyze_misses.py uses to separate a near miss from a total miss.
+NEAR_IOU = 0.1
 PAD = 90
 MIN_VIEW = 760
 
@@ -65,7 +69,7 @@ def build_cases(gt: dict, preds: dict, seed: int) -> list[dict]:
             best_iou = float(m[j].max()) if m.size else 0.0
             if best_iou >= MATCH_IOU:
                 continue
-            det = p[int(m[j].argmax())].tolist() if best_iou > 0 else None
+            det = p[int(m[j].argmax())].tolist() if best_iou >= NEAR_IOU else None
             cases.append({"id": f"{stem}#{j}", "stem": stem, "cls": class_of(stem),
                           "gt": g[j].tolist(), "det": det, "best_iou": best_iou,
                           "gt_is_cyan": rng.random() < 0.5})
@@ -206,28 +210,38 @@ def main() -> None:
         img = cv2.imread(str(img_dir / f"{case['stem']}.jpg"))
         view = render(img, case)
         single = case["det"] is None
-        head = (f"{i+1}/{len(order)}  {case['cls']}   NO DETECTOR BOX  -  is there a battery "
-                f"here?  y / n") if single else \
+        head = (f"{i+1}/{len(order)}  {case['cls']}   ONE BOX ONLY (detector found nothing "
+                f"here)  -  is there a battery?   y=yes   n/3=no") if single else \
                (f"{i+1}/{len(order)}  {case['cls']}   IoU {case['best_iou']:.2f}  -  which box "
-                f"is better?  1=cyan  2=magenta  3=neither")
+                f"is better?   1=cyan   2=magenta   3/n=neither")
+        hint = ""
         while True:
             disp = view.copy()
             cv2.rectangle(disp, (0, 0), (disp.shape[1], 34), (0, 0, 0), -1)
             cv2.putText(disp, head, (8, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.58, (255, 255, 255), 1,
                         cv2.LINE_AA)
+            if hint:
+                cv2.rectangle(disp, (0, 34), (disp.shape[1], 64), (0, 0, 0), -1)
+                cv2.putText(disp, hint, (8, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 165, 255),
+                            1, cv2.LINE_AA)
             cv2.imshow(WIN, disp)
             k = cv2.waitKey(20) & 0xFF
             v = None
             if single and k == ord("y"):
                 v = "real_miss"
-            elif single and k == ord("n"):
+            elif single and k in (ord("n"), ord("3")):
                 v = "phantom_miss"
             elif not single and k == ord("1"):
                 v = "det_better" if not case["gt_is_cyan"] else "gt_better"
             elif not single and k == ord("2"):
                 v = "det_better" if case["gt_is_cyan"] else "gt_better"
-            elif not single and k == ord("3"):
+            elif not single and k in (ord("3"), ord("n")):
                 v = "not_a_battery"
+            elif k in (ord("y"), ord("1"), ord("2")):
+                # A key that is valid on the OTHER kind of case. Say so instead of ignoring it --
+                # a dead keypress reads as a frozen window.
+                hint = ("this case has only one box -- press y or n"
+                        if single else "this case has two boxes -- press 1, 2 or 3")
             elif k == ord("s"):
                 i += 1
                 break
