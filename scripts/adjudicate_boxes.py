@@ -167,6 +167,10 @@ def main() -> None:
     ap.add_argument("--conf", type=float, default=0.25)
     ap.add_argument("--seed", type=int, default=20260807)
     ap.add_argument("--report", action="store_true", help="score existing verdicts, no GUI")
+    ap.add_argument("--crops", action="store_true",
+                    help="write a padded crop of every case judged a genuine detection miss. "
+                         "That bucket is the entire evidence base for a lighting/hardware ask, "
+                         "so it should be looked at, not just counted.")
     ap.add_argument("--out", default=str(repo / "results/phase4/adjudication.json"))
     args = ap.parse_args()
 
@@ -197,6 +201,24 @@ def main() -> None:
             "score": score(cases, verdicts, n_gt_total, n_matched),
             "cases": [{k: v for k, v in c.items() if k != "gt_is_cyan"} for c in cases],
         }, indent=2), encoding="utf-8")
+
+    if args.crops:
+        cdir = outp.parent / "genuine_misses"
+        cdir.mkdir(parents=True, exist_ok=True)
+        n = 0
+        for c in cases:
+            if verdicts.get(c["id"]) != "real_miss":
+                continue
+            img = cv2.imread(str(img_dir / f"{c['stem']}.jpg"))
+            x1, y1, x2, y2 = (int(t) for t in c["gt"])
+            cx1, cy1 = max(0, x1 - PAD), max(0, y1 - PAD)
+            crop = img[cy1:min(img.shape[0], y2 + PAD), cx1:min(img.shape[1], x2 + PAD)].copy()
+            if crop.size:
+                cv2.rectangle(crop, (x1 - cx1, y1 - cy1), (x2 - cx1, y2 - cy1), (0, 255, 255), 2)
+                cv2.imwrite(str(cdir / f"{n:02d}_{c['cls']}_{c['id'].split('#')[1]}.jpg"), crop)
+                n += 1
+        print(f"wrote {n} genuine-miss crops -> {cdir}")
+        return
 
     if args.report:
         print_report(score(cases, verdicts, n_gt_total, n_matched))
