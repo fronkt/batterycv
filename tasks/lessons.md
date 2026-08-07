@@ -80,3 +80,38 @@
   in a loop until sizes match, then sha256 both ends.
 - Prefer shipping small derived artifacts (698 crops = 19 MB) over staging raw data onto
   disk-tight shared boxes; run the heavy model where the disk is.
+
+## Evaluation / metrics (Phase 4 round 3, 2026-08-07)
+
+- **A label set seeded from the model cannot measure that model.** Pre-filling labels from the
+  detector and accepting/rejecting boxes yields recall ~1.0 by construction — every box in the set
+  came from the detector, so "recall" degenerates into "how many of your own boxes did we keep."
+  Two full 72-frame passes produced exactly that (1.000 on all six classes, 66/72 files
+  byte-identical to raw detector output, zero boxes added). If the answer must be independent of
+  the model, the labels must be drawn without the model on screen.
+- **When a tool can only show what was FOUND, nothing that was MISSED will ever be added.**
+  The labeler displayed detector boxes and nothing else, so misplaced/absent objects had no
+  on-screen cue and silently vanished. Any review UI needs an explicit channel for "something
+  should be here that isn't" — a reference overlay, a count, a flag.
+- **Prefer adjudication to re-annotation when the question is "which of these is right".** 102
+  blind A/B keypresses answered in 15 minutes what a full re-label could not answer at all. Design
+  it so unjudged items count AGAINST the hypothesis, so a partial pass can only under-state.
+- **Blinding the colour does not blind the geometry.** The rater favoured the detector 84/85 vs an
+  independent panel's 34/36 (binomial p=0.047). GT boxes were systematically larger and lower, so a
+  rater who knows the signature can self-unblind. State the residual bias rather than claiming
+  "blind."
+- **A regression slope below 1 is usually noise, not scale.** Check `slope(y|x) × slope(x|y)`:
+  a real scale error gives 1, pure measurement noise gives r². Here both axes gave r² to four
+  decimals, killing a "vertical compression / letterbox bug" story before it reached the doc.
+- **A displaced label is charged twice** — once as a false negative and once as a false positive
+  from the orphan detection beside it. 11/12 cases here. Don't diagnose precision and recall as
+  separate problems before checking whether one misplacement explains both.
+- **Test the tool you're about to blame.** `WINDOW_NORMAL` + raw callback coords looked like a
+  perfect explanation for scaled labels; driving the real cursor to known client coordinates showed
+  OpenCV maps into image space correctly. Two minutes of experiment beat a plausible story.
+- **Synthetic input events are not a substitute for real ones.** Posted WM_MOUSEMOVE messages
+  returned an identical coordinate for three different probes — OpenCV reads `GetCursorPos`, not
+  lParam. Identical outputs across distinct inputs means the harness is broken, not that the
+  hypothesis is confirmed.
+- **Sorted file order is class-ordered here.** Any partial pass over the eval frames without
+  stratification samples one class — and it's `li_ion_laptop`, the best-performing one.
