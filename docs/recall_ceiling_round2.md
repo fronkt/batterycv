@@ -147,14 +147,28 @@ flat-fielding corrects a real 1.89× centre/corner vignette but lowers recall, p
 CLAHE at grid=8 already equalizes locally. **All 10 temporal variants covered zero GT objects the
 baseline misses.** `scripts/probe_temporal.py`.
 
-**Inference resolution — no new objects.** Every inference had been downscaling the 1280x1024
-frames to imgsz 1024, and object size predicts failure (covered objects median min-side 184 px,
-total misses 128 px), so running the frozen ft1 at native 1280 looked promising. It moves recall
-@IoU0.5 from 0.452 to 0.457 — and moves recall @IoU0.3 and centre-in-GT by **exactly nothing**
-(0.790 and 0.839 in both cases). It finds no object it was not already finding; it only tightens
-boxes fractionally. Note the two convention-free columns being *identical* is itself a useful
-signal: it says the remaining gap is not about what the network can resolve.
-`scripts/probe_inference_scale.py`.
+**Inference resolution and tiling — no new objects; tiling actively loses some.** Every inference
+had been downscaling the 1280x1024 frames to imgsz 1024, and object size predicts failure
+(covered objects median min-side 184 px, total misses 128 px), so both native-resolution and
+tiled inference on the frozen ft1 looked promising. Neither delivers:
+
+| config | recall@0.5 | prec@0.5 | recall@0.3 | centre-in-GT |
+|---|---|---|---|---|
+| imgsz 1024 (baseline) | 0.452 | 0.410 | 0.790 | 0.839 |
+| imgsz 1280 (native) | 0.457 | 0.411 | **0.790** | **0.839** |
+| 2x2 tiling @1024 | 0.446 | 0.472 | 0.742 | **0.758** |
+
+Native resolution moves the two convention-free columns by **exactly nothing** — it finds no
+object it was not already finding, it only tightens boxes fractionally. Tiling trades recall for
+precision (+0.062 precision) and makes the convention-free columns *worse*: centre-in drops 8
+points, i.e. it genuinely loses objects, most plausibly the large laptop/bulk packs that straddle
+a tile seam or overflow a tile's field of view (ni_cd_bulk 0.750 → 0.688, ni_mh_all 0.080 →
+0.040, while the small-cell class ni_cd_small does improve 0.435 → 0.478).
+
+That both fail is consistent with everything else here: the objects are not too small or too
+poorly resolved to detect, because they are already being detected.
+`scripts/probe_inference_scale.py` (use `--only` to run one config at a time; tiling is 4-9x the
+cost of a plain pass).
 
 ## Belt physics, re-verified (and one correction to this round's own work)
 
