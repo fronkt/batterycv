@@ -56,8 +56,14 @@ python scripts/label_assisted.py \
   --images  <eval_dir>/images \
   --labels  <eval_dir>/labels_v2 \
   --weights runs/detect/battery_ft1/weights/best.pt \
-  --imgsz 1024 --conf 0.25
+  --imgsz 1024 --conf 0.25 --order stratified
 ```
+
+`--order stratified` matters for a partial pass. Frames are named class-first, so the default
+sorted order shows all 12 `li_ion_laptop` frames before anything else — and that class already
+has the *best* recall (0.733) while `ni_mh_all` has the worst (0.080). A pilot on the default
+order would understate the correction. Stratified round-robins the six classes, so the first 15
+frames cover all of them.
 
 `<eval_dir>` is the `eval_dir` entry in `configs/paths.yaml`. Because `labels_v2/` starts empty,
 every frame pre-fills from the detector rather than loading the old boxes — which is what you

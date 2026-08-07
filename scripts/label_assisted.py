@@ -38,6 +38,23 @@ def yolo_path(labels_dir: Path, img: Path) -> Path:
     return labels_dir / (img.stem + ".txt")
 
 
+def stratify(images: list[Path]) -> list[Path]:
+    """Round-robin over the class prefix (`ni_mh_all__cam_...jpg` -> `ni_mh_all`).
+
+    Frames are named class-first, so plain sorted order exhausts one class before reaching the
+    next: a 15-frame pilot would see only laptop cells, the class with the *best* recall, and
+    would understate a correction driven by the worst ones. Interleaving makes any prefix of the
+    pass representative. Resumability is unaffected — progress is keyed by filename, not index.
+    """
+    groups: dict[str, list[Path]] = {}
+    for p in images:
+        groups.setdefault(p.name.split("__")[0], []).append(p)
+    out: list[Path] = []
+    for k in range(max(len(v) for v in groups.values()) if groups else 0):
+        out.extend(v[k] for v in groups.values() if k < len(v))
+    return out
+
+
 def load_boxes(p: Path, w: int, h: int):
     boxes = []
     if p.exists():
@@ -94,12 +111,17 @@ def main() -> None:
                     default=str(repo / "runs/detect/battery_yw_s1280/weights/best.pt"))
     ap.add_argument("--conf", type=float, default=0.25)
     ap.add_argument("--imgsz", type=int, default=1280)
+    ap.add_argument("--order", choices=("name", "stratified"), default="name",
+                    help="stratified: round-robin over the class prefix, so a partial pass "
+                         "covers every class instead of exhausting one. Use for a pilot.")
     args = ap.parse_args()
 
     img_dir = Path(args.images)
     labels_dir = Path(args.labels)
     labels_dir.mkdir(parents=True, exist_ok=True)
     images = sorted(img_dir.glob("*.jpg"))
+    if args.order == "stratified":
+        images = stratify(images)
     if not images:
         sys.exit(f"no images in {img_dir} (run build_label_pool.py first)")
     if not Path(args.weights).exists():
