@@ -154,6 +154,10 @@ def main() -> None:
                          "object you are about to drop -- the HUD counts them and 'a' adopts "
                          "them. Without this the tool cannot show you what is MISSING, only "
                          "what the detector found.")
+    ap.add_argument("--only-uncovered", action="store_true",
+                    help="With --ref: visit ONLY the frames that have a reference box no saved "
+                         "box covers. Turns a full re-pass into just the frames in dispute, and "
+                         "avoids paging through correct frames (which is how boxes get dropped).")
     args = ap.parse_args()
 
     img_dir = Path(args.images)
@@ -194,6 +198,22 @@ def main() -> None:
 
     ref_dir = Path(args.ref) if args.ref else None
     seen: dict[str, bool] = {}          # stem -> was it saved exactly as pre-filled?
+
+    if args.only_uncovered:
+        if ref_dir is None:
+            sys.exit("--only-uncovered needs --ref (there is nothing to be uncovered against)")
+        keep = []
+        for p in images:
+            im = cv2.imread(str(p))
+            hh, ww = im.shape[:2]
+            if unmatched(load_boxes(yolo_path(ref_dir, p), ww, hh),
+                         load_boxes(yolo_path(labels_dir, p), ww, hh)):
+                keep.append(p)
+        print(f"--only-uncovered: {len(keep)} of {len(images)} frames have an uncovered "
+              f"reference box")
+        if not keep:
+            sys.exit("nothing to adjudicate — every reference box is covered")
+        images = keep
 
     i = 0
     while 0 <= i < len(images):
