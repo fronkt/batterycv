@@ -285,10 +285,15 @@ substantially the ruler, not the imagery.** Full writeup in `docs/recall_ceiling
 - [x] Matcher adversarially reviewed; AP@0.5 verified exact; 6 bugs fixed; divergence from the
   original `probe_labeler.match` bounded at +0.0019 recall, so Phase-4 and published numbers
   are comparable.
-- [ ] **BLOCKED, and deliberately so — Tracks B (ensemble), C (preprocessing) and the inference
-  resolution/tiling sweep are built and smoke-tested but NOT run to conclusions.** Running them
-  to three decimals against labels now known to be the binding error would repeat exactly the
-  round-1 mistake. They are cheap to run the moment the eval set is re-labeled.
+- [x] Inference resolution + tiling — **negative, and measured on convention-free metrics so it
+  survives the GT problem.** Native 1280 moves recall@0.3 and centre-in-GT by *exactly nothing*
+  (0.790 / 0.839 both); 2x2 tiling trades recall for precision and *loses* objects
+  (centre-in 0.839 → 0.758), most plausibly large packs straddling a tile seam. The objects are
+  not too small or poorly resolved to detect — they are already detected.
+- [ ] **BLOCKED, and deliberately so — Tracks B (ensemble) and C (preprocessing) are built and
+  smoke-tested but NOT run to conclusions.** Running them to three decimals against labels now
+  known to be the binding error would repeat exactly the round-1 mistake. Both are cheap to run
+  the moment the eval set is re-labeled.
 - [ ] **The one action everything else waits on: re-label the 72 eval frames to a WRITTEN box
   convention, by a human.** Minimum spec: does an attached wire/connector belong inside the box
   (the most common single disagreement); how are touching cells separated; how are frame-clipped
