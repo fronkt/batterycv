@@ -168,14 +168,69 @@ fix is labels drawn correctly.
   detection weakness on small cylindrical cells is **open**, and it is the one place a lighting
   question could still legitimately be asked — after its labels are fixed, not before.
 
+## CONFIRMED — blank re-label, 36 frames (2026-08-08)
+
+36 of the 72 frames (6 per class, stratified) were re-labeled with `label_assisted.py --no-prefill`.
+The detector is never loaded in that mode, so these labels cannot echo it. 101 boxes, 12 s/frame,
+per-frame times 4–53 s.
+
+```
+BLANK-LABELLED EVAL (36 frames, 101 GT boxes, conf>=0.25, IoU>=0.5)
+  TP 96   FP 8   FN 5
+  recall    0.950   95% CI [0.889, 0.979]
+  precision 0.923   95% CI [0.856, 0.961]
+
+  published on the ORIGINAL labels:  recall 0.452   precision 0.410
+```
+
+Same 36 frames, same frozen weights, per class:
+
+| class | recall on v1 | recall on v3 |
+|---|---|---|
+| li_ion_laptop | 0.619 | 0.952 |
+| li_ion_mobile | 0.516 | 0.968 |
+| liso2 | 0.417 | 1.000 |
+| ni_cd_bulk | 0.800 | 1.000 |
+| ni_cd_small | 0.250 | 0.846 |
+| ni_mh_all | 0.100 | 0.923 |
+| **TOTAL** | **0.479** | **0.950** |
+
+**`ni_mh_all` goes 0.100 → 0.923.** The class round 1 called "essentially invisible" and round 3
+still flagged as the one place a lighting question survived is, in fact, detected almost perfectly.
+The lighting question is now closed for every class.
+
+### The re-label is not a memory echo — tested
+
+The rater had seen these frames with detector boxes overlaid many times, so an echo was the live
+risk. Matching each label to its nearest detector box:
+
+```
+v1 (original hand)   n=80   median IoU vs detector 0.540   w-ratio 1.074   dx  -6.8 px   dy +13.6 px
+v3 (blank re-label)  n=99   median IoU vs detector 0.862   w-ratio 1.024   dx  +0.9 px   dy  +2.3 px
+```
+
+A set drawn from memory of the detector's boxes would sit near IoU 1.0; **v3 sits at 0.862 with only
+6.1% of boxes above 0.95** — independently drawn, agreeing on the object but not on the pixels,
+which is what two careful annotators produce. It also carries **no placement bias** (dy +2.3 px vs
+v1's +13.6 px) and is nearly tight (1.024 vs v1's 1.074 oversize). Those are exactly the two defects
+round 3 identified, and they are gone.
+
+This also corroborates the blind adjudication independently: adjudication gave 0.928 corrected,
+the blank re-label gives 0.950 (CI [0.889, 0.979]). Different methods, different failure modes,
+same answer.
+
 ## Next
 
-1. **Do not send the current numbers to Chen.** Neither 0.452 nor 0.928 is a defensible headline.
-2. **Re-label the eval set from scratch, not from detector pre-fills** — blank frames, the written
-   convention in `docs/labeling_convention.md`, and no detector seeding. That is the only way to get
-   a number that measures the detector rather than echoing it.
-3. **Then** re-run `analyze_misses.py`, `probe_ensemble.py`, and `probe_preprocess.py`, which were
-   deliberately left unrun. Tuning against the current ruler would repeat the round-1 mistake.
+1. **Finish the remaining 36 frames** in blank mode, so the headline covers the same 72 frames the
+   published 0.452 did and the comparison is like-for-like. ~35 minutes.
+2. **The headline for Chen is recall 0.950 / precision 0.923** (CI above), with the explanation that
+   the original 0.452 was measuring label placement error, not detection. `docs/recall_ceiling_round3.md`
+   is the backing.
+3. **The parked probes are now mostly moot.** `probe_ensemble.py` and `probe_preprocess.py` were
+   built to chase recall that turns out not to be missing. Run them only if the full-72 number
+   comes in materially below 0.95; there is little headroom left to buy.
+4. **Look at the 8 false positives.** With recall settled, precision 0.923 is the remaining number
+   worth improving, and it is now measurable for the first time.
 4. Check whether the **training** labels carry the same bias. The eval labels were hand-drawn with
    `label_eval.py`; the training labels came from `pseudo_label_sam.py`, a different path, so the
    defect does not automatically transfer. Two things argue it does not: the detector places boxes
