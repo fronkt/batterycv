@@ -164,6 +164,12 @@ def main() -> None:
                          "for any eval set.")
     ap.add_argument("--limit", type=int, default=0,
                     help="stop after N frames (with --order stratified, an even slice of classes)")
+    ap.add_argument("--skip-labeled", action="store_true",
+                    help="Skip frames that already have a label file, i.e. resume a pass that was "
+                         "quit part way. Every navigation key commits, so a file exists for every "
+                         "frame already VISITED -- including the ones legitimately saved empty. "
+                         "Applied before --limit, so --limit counts new frames. Turn it off to go "
+                         "back and correct a frame you have already done.")
     ap.add_argument("--only-uncovered", action="store_true",
                     help="With --ref: visit ONLY the frames that have a reference box no saved "
                          "box covers. Turns a full re-pass into just the frames in dispute, and "
@@ -176,6 +182,11 @@ def main() -> None:
     images = sorted(img_dir.glob("*.jpg"))
     if args.order == "stratified":
         images = stratify(images)
+    if args.skip_labeled:
+        todo = [p for p in images if not yolo_path(labels_dir, p).exists()]
+        print(f"--skip-labeled: {len(images) - len(todo)} frames already labeled, "
+              f"{len(todo)} to go")
+        images = todo
     if args.limit:
         images = images[:args.limit]
     if not images:
