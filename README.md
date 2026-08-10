@@ -23,6 +23,15 @@ with brand / part # under a battery when the OCR read one.*
 | 2 OCR | Qwen2.5-VL-3B on all 698 crops (classical OCR fails outright) | coverage ≠ accuracy: the VLM **prior-fills** chemistry/voltage/capacity — only brand (14%) + part # (15%) are trustworthy | `docs/ocr_findings.md` |
 | 3 classify | yolo11n-cls on crops, run-grouped holdout | **6-way type acc 0.874 · 4-way chemistry acc 0.899** (majority baseline 0.603); OCR features add zero — sorting is visual, OCR is metadata | `docs/type_classifier_findings.md` |
 
+**Demo videos for all 103 capture runs** (annotated sorting-line view, one zip per chemistry)
+are on the [demo-videos-v1 release](https://github.com/fronkt/batterycv/releases/tag/demo-videos-v1),
+with `results/demo/all_runs_summary.csv` indexing per-run battery counts and type agreement
+(716/756 = 94.7% overall — includes training runs; the honest held-out numbers are the table above).
+Note the demo tracker is **BoT-SORT**: ByteTrack's IoU association silently drops batteries whose
+box (~160 px) is smaller than the belt's ~156 px/frame motion — ni_cd_small/ni_mh_all counted
+10/12 batteries instead of 49/31 until BoT-SORT's motion compensation bridged the gap (which is
+also why the demo counts 756 batteries vs. the 698-crop Phase-2 inventory; `tasks/lessons.md`).
+
 The two project-level lessons worth carrying beyond this repo: (1) every phase hit the same
 wall — dark, low-contrast imagery; the step-change lever is belt **lighting**, not more
 labels/compute; (2) a VLM's field coverage is not accuracy — audit value *distributions*

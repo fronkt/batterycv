@@ -1,0 +1,31 @@
+{
+  "n_frames": 72,
+  "near_miss_geometry": {
+    "n": 84,
+    "median_width_ratio": 0.8544586626280277,
+    "median_height_ratio": 0.8829897262630104,
+    "median_center_dx_frac": 0.09588080480474556,
+    "median_center_dy_frac": -0.20744123502205036
+  },
+  "best_isotropic": {
+    "scale": 1.1,
+    "recall": 0.4946236559139785
+  },
+  "best_anisotropic": {
+    "sx": 1.2,
+    "sy": 1.0,
+    "recall": 0.5053763440860215
+  },
+  "heldout": {
+    "fit=even report=odd": {
+      "fitted_scale": 1.1,
+      "recall": 0.38461538461538464,
+      "baseline_recall": 0.3956043956043956
+    },
+    "fit=odd report=even": {
+      "fitted_scale": 1.2,
+      "recall": 0.5263157894736842,
+      "baseline_recall": 0.5789473684210527
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "fit_frames": 36,
+  "report_frames": 36,
+  "dx": 4,
+  "dy": -28,
+  "recall_fit_at_best": 0.6105263157894737,
+  "recall_heldout_baseline": 0.37362637362637363,
+  "recall_heldout_shifted": 0.4065934065934066,
+  "recall_all_baseline": 0.45161290322580644,
+  "span": 160,
+  "step": 4,
+  "verdict": "A single translation does NOT transfer. The offset is not a global registration error; treat the per-box displacement as label noise instead."
+}

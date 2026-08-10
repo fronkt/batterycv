@@ -1,5 +1,17 @@
 # Why the detector caps at ~0.45 recall — and what merge does / doesn't fix
 
+> **⚠ CONCLUSIONS SUPERSEDED (2026-08-06) — see [`recall_ceiling_round2.md`](recall_ceiling_round2.md).**
+> The experiments below reproduce and stand. Their shared *conclusion* — that the ceiling is the
+> dark/low-contrast imagery, and that the remaining lever is belt lighting — does not. Every
+> experiment here was scored against the same 72-frame hand-labeled eval set, and that ruler is
+> the thing that caps at ~0.45: only 5.9% of ground-truth batteries are genuinely undetected,
+> recall goes 0.452 → 0.790 by moving the IoU bar 0.5 → 0.3, and a detection lands inside 83.9%
+> of GT boxes. Blind auditors judged the detector's box better than the ground-truth box in 34 of
+> 36 disputed cases and rated the batteries "obvious" in 89% of them, "invisible" in none —
+> including every audited `ni_mh_all` panel, the class called "essentially invisible" below.
+> Measured object-vs-belt contrast is *anti*-correlated with recall. **The lighting recommendation
+> is withdrawn pending a re-labeled eval set.**
+
 Investigation (2026-06-27) into the honest-eval result (P 0.23 · R 0.42 · mAP50 0.19). Goal was
 to implement SAM mask de-duplication/merging, re-pseudo-label, and retrain. The investigation
 re-rooted the diagnosis before spending GPU on a full re-label.

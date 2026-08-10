@@ -27,3 +27,6 @@ Thumbs.db
 
 # keep small viz samples explicitly if needed via: git add -f docs/figures/<file>
 !docs/figures/*.png
+
+# Phase-4 probe prediction cache (regenerable .npz)
+results/phase4/cache/

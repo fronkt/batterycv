@@ -1,0 +1,9 @@
+imgsz1024 (baseline)   R@.5 0.452  P@.5 0.410  R@.3 0.790  centre-in 0.839
+tile2x2 @1024          R@.5 0.446  P@.5 0.472  R@.3 0.742  centre-in 0.758
+
+=== per-class recall @ IoU 0.5 (conf>=0.25) ===
+config                  li_ion_lapt  li_ion_mobi        liso2   ni_cd_bulk  ni_cd_small    ni_mh_all
+imgsz1024 (baseline)          0.733        0.406        0.435        0.750        0.435        0.080
+tile2x2 @1024                 0.733        0.391        0.478        0.688        0.478        0.040
+
+wrote results\phase4\inference_tiling.json

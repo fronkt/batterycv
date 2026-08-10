@@ -176,3 +176,128 @@ Full plan: `../.claude/plans/buzzing-tinkering-panda.md` (or repo `docs/` once c
   Completes Phase-1 detect→track. Default weights = `battery_ft1/best.pt`. ID counter does fragment
   a bit on the dark classes (re-id when a cell is briefly lost) — fine on laptop/ni_cd_bulk; same
   imagery limit as detection elsewhere.
+
+## Phase 4 — recall ceiling, round 2: the compute-only levers (2026-08-06)
+
+Context: every lever tried in Phase 1 was a variation on ONE family — single-frame, static,
+absolute-brightness detection (SAM / YOLO-World / YOLO11 at 3 resolutions, 2 backbones,
+36 and 201 hand-labeled frames). All hit the same ~0.45 recall wall, and the doc concluded the
+only remaining lever is belt **lighting** (hardware). That conclusion is correct *for that
+family*. It was never tested against methods that use information the family throws away:
+**time** (the belt moves), **model disagreement** (5 trained checkpoints sit unused on disk),
+and **the preprocessing itself** (CLAHE's clip/grid were never swept — every sweep held them fixed).
+
+Goal: determine whether any compute-only lever moves recall on the two classes that carry the
+whole deficit (`ni_mh_all` 0.12, `li_ion_mobile` 0.45) BEFORE asking Chen for a lighting rig.
+Deliverable either way is a defensible answer: a working lever, or evidence that closes the
+question so the hardware ask is backed by more than one family of experiments.
+
+### Ground rules
+- [x] One shared matcher for every probe — `batterycv/evalutil.py` (greedy IoU-0.5, the same
+  semantics as `probe_labeler.py` that produced the published tables). No probe rolls its own.
+- [x] Harness gated against published ft1 before use — `scripts/validate_harness.py`:
+  R 0.452 vs published 0.446, AP@0.5 0.233 vs mAP50 0.252, per-class pattern reproduced
+  (ni_mh 0.12, mobile 0.45). Precision reads lower (0.410 vs 0.466) only because Ultralytics
+  reports P at best-F1, not at a fixed conf. Comparisons are therefore trustworthy.
+- Report **per-class** recall always. Aggregate accuracy hid the ByteTrack drop-out for weeks
+  (see lessons.md); it will hide this too.
+- Complementarity (does method X cover objects the detector misses?) is the decisive question,
+  not X's standalone recall. A method with 0.30 recall that covers a *disjoint* 0.30 is worth
+  more than one with 0.45 that covers the same objects.
+
+### A — temporal / multi-frame (NOT motion detection — see the physics correction below)
+Belt motion re-measured from scratch 2026-08-06, because the whole track depends on it:
+- Objects **ride the belt and translate with it** — pure horizontal, dy≈0, and per-run speed
+  varies ~30-220 px/frame (not one constant). Measured by tracking detected box centroids:
+  run 92 x = 1212→1070→919→764 (~145 px/f), run 4 x = 1067→967→816→664 (~100-150 px/f).
+  The ~156 px/frame in `lessons.md` is **confirmed correct**.
+- **Consequence: a naive moving-object detector cannot work here.** Objects and belt move
+  together, so motion-compensated differencing cancels both. The original framing of this
+  track ("find what moves differently from the belt") was wrong and is retracted.
+- Method gotcha worth keeping: brute-force searching the shift that minimises WHOLE-FRAME mean
+  absdiff returns ~0 and is flatly wrong — the belt is near-featureless and objects cover a tiny
+  area fraction, so that average is insensitive to the true shift. It briefly produced a
+  confident "the scene is static, the 156 px/frame figure is an artifact" conclusion that the
+  object-centroid check demolished. Estimate shift on high-gradient pixels or by phase
+  correlation, and always validate against object displacement.
+
+What actually has headroom is using time against **sensor noise**, not against motion:
+- [ ] `scripts/probe_temporal.py`, idea A1 — **motion-aligned temporal stacking.** In
+  belt-aligned coordinates the scene is static, so warping k in-run neighbors onto the eval
+  frame and averaging is pure denoising: measured per-pixel temporal σ ≈ 5.3/255, cut by √k.
+  Against a battery-vs-belt contrast of only a few grey levels that is a plausible part of the
+  real detection limit. Costs image margin (~150 px per stacked frame) — track a valid-count
+  mask and report the degraded area.
+- [ ] idea A2 — **temporal-median flat-field.** In camera coordinates (no alignment) the belt
+  slides past, so a per-pixel median over a run approximates the *static* components: vignetting
+  ("bright center / dark corners", per `preprocess.py`), fixed-pattern noise, lens dirt, mean
+  belt level. Divide it out, renormalize, then CLAHE. Standard flat-fielding, independent of A1.
+- [ ] Report standalone per-class recall ceiling AND union-with-ft1 coverage (the payoff metric):
+  a method that re-finds the same objects is worthless even at equal recall.
+
+### B — ensemble of the checkpoints already on disk
+- [ ] `scripts/probe_ensemble.py`. 5 checkpoints exist (`battery_yolo11` SAM-trained,
+  `battery_yolo11_yw` YOLO-World-trained, `battery_yw_s1280`, `battery_ft1`, `battery_ft3`).
+  They were only ever compared and the winner kept — never fused. Different pseudo-labelers →
+  different failure modes → plausibly different misses. Fuse with WBF/NMS, sweep the fusion
+  params. Zero training cost.
+- [ ] Report the oracle union recall too: the ceiling any fusion rule could reach.
+
+### C — preprocessing sweep (the untuned knob)
+- [ ] `scripts/probe_preprocess.py`. `normalize_illumination` is CLAHE clip=2.5 grid=8, fixed
+  since day one and never swept. Test clip/grid variants, gamma, multi-scale Retinex, unsharp.
+- [ ] Caveat to respect: the detector was TRAINED on clip=2.5/grid=8, so changing inference
+  preprocessing risks train/test mismatch and may cost recall. Interpret a drop as mismatch,
+  not as evidence the variant is bad — and check the zero-shot labeler (no mismatch) separately.
+
+### D — deferred, needs GPU (spec only, not run this round)
+- [ ] Synthetic hard-example augmentation: composite bright crops from the strong classes onto
+  real belt at reduced contrast to manufacture the diagnosed failure mode, instead of buying
+  more real labels (which plateaued at 36 frames).
+- [ ] Segmentation head (yolo11n-seg, bootstrapped from the Phase-1 SAM masks): misses cluster at
+  IoU 0.3-0.49, so tighter boundary fitting could push near-misses over the 0.5 bar.
+- [ ] Learned low-light enhancement (Zero-DCE class, self-supervised, no paired GT) if C shows
+  preprocessing has real headroom.
+
+### Review (2026-08-06) — the question changed underneath the plan
+
+The plan above asks "which compute lever raises recall". The diagnostic that was supposed to
+*aim* that search answered a different and more important question first: **the ~0.45 ceiling is
+substantially the ruler, not the imagery.** Full writeup in `docs/recall_ceiling_round2.md`;
+`docs/recall_ceiling_findings.md` now carries a superseded banner.
+
+- [x] Miss taxonomy (`analyze_misses.py`): only **5.9%** of the 186 GT boxes are genuine total
+  misses (IoU<0.1); 32.8% are near-misses at IoU 0.3-0.5. Recall would be 0.817 if near-misses
+  alone were fixed.
+- [x] Threshold sensitivity (`probe_gt_audit.py`): recall 0.452 @IoU0.5 → **0.790 @IoU0.3**;
+  convention-free centre-in-GT = **0.839**. Every class shows a 15-48 pt gap.
+- [x] Blind audit, 3 independent judges, not told which box source was which: **34/36 panels
+  favour the DETECTOR's box** over the ground truth (91.7% unanimous, sign-test p≈2e-9).
+  Visibility 96 "obvious" / 12 "subtle" / **0 "invisible"** out of 108 ratings; all 30 ni_mh_all
+  ratings "obvious" — the class documented as "essentially invisible".
+- [x] Contrast (`contrast_detboxes.json`): measured in TIGHT detector boxes, contrast is
+  **anti-correlated** with recall (ni_mh 6.6σ → recall .08; ni_cd_bulk 2.1σ → recall .875).
+- [x] Track A temporal — **clean negative.** Stacking is a low-pass filter, not a denoiser (object
+  edge SNR ×0.97→×0.66) because of 13 px residual misregistration, not interpolation. Flat-field
+  corrects a real 1.89× vignette but lowers recall. All 10 variants: **zero** new GT covered.
+- [x] Box-scale correction — **clean negative**, and a good reminder to hold out even for a
+  one-parameter fix (+0.006 in-sample, −0.011/−0.053 held out).
+- [x] Matcher adversarially reviewed; AP@0.5 verified exact; 6 bugs fixed; divergence from the
+  original `probe_labeler.match` bounded at +0.0019 recall, so Phase-4 and published numbers
+  are comparable.
+- [x] Inference resolution + tiling — **negative, and measured on convention-free metrics so it
+  survives the GT problem.** Native 1280 moves recall@0.3 and centre-in-GT by *exactly nothing*
+  (0.790 / 0.839 both); 2x2 tiling trades recall for precision and *loses* objects
+  (centre-in 0.839 → 0.758), most plausibly large packs straddling a tile seam. The objects are
+  not too small or poorly resolved to detect — they are already detected.
+- [ ] **BLOCKED, and deliberately so — Tracks B (ensemble) and C (preprocessing) are built and
+  smoke-tested but NOT run to conclusions.** Running them to three decimals against labels now
+  known to be the binding error would repeat exactly the round-1 mistake. Both are cheap to run
+  the moment the eval set is re-labeled.
+- [ ] **The one action everything else waits on: re-label the 72 eval frames to a WRITTEN box
+  convention, by a human.** Minimum spec: does an attached wire/connector belong inside the box
+  (the most common single disagreement); how are touching cells separated; how are frame-clipped
+  objects handled.
+- [ ] Only after re-measuring: revisit whether the residual 5.9% total-miss population justifies
+  a hardware/lighting ask. That population is the only evidence that could still support one, and
+  the blind audit is structurally blind to it (no detector box ⇒ no panel to judge).

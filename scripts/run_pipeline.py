@@ -82,7 +82,11 @@ def main() -> None:
     ap.add_argument("--conf", type=float, default=0.25)
     ap.add_argument("--imgsz", type=int, default=1024)
     ap.add_argument("--cls-imgsz", type=int, default=224)
-    ap.add_argument("--tracker", default="bytetrack.yaml")
+    ap.add_argument("--tracker", default="botsort.yaml",
+                    help="botsort (default): its global-motion compensation estimates belt "
+                         "translation from the textured belt itself, so tracks confirm even "
+                         "when a battery moves its own length per frame — ByteTrack's plain "
+                         "IoU association loses small cells (~160px box vs ~156px/frame belt)")
     ap.add_argument("--fps", type=int, default=6)
     ap.add_argument("--max-frames", type=int, default=0)
     ap.add_argument("--out", default=None)
