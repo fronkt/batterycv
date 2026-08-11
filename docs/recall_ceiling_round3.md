@@ -242,3 +242,70 @@ A note on tooling, since it cost two wasted labeling passes: `label_assisted.py`
 to overlay a second label set and flag objects about to be dropped, `--only-uncovered` to visit
 just the disputed frames, and prints a warning when a pass produces a circular label set. None of
 that makes a detector-seeded label set valid for measuring that detector — see the top of this doc.
+
+---
+
+## Settled: the full 72 frames (2026-08-11)
+
+The remaining 36 frames were labeled in blank mode, so the eval set is now complete: **72 frames,
+202 boxes**, drawn without the detector ever being loaded. The comparison below is like-for-like
+with the published number in every respect — same 72 frames, same frozen `battery_ft1/best.pt`,
+same matcher, conf >= 0.25, IoU 0.5.
+
+**The v1 column reproduces the published 0.452 exactly.** That is the control: it proves the
+harness is not the source of the difference.
+
+| class | v1 recall | v3 recall | delta |
+|---|---|---|---|
+| li_ion_laptop | 0.733 | 0.968 | +0.234 |
+| li_ion_mobile | 0.406 | 0.911 | +0.506 |
+| liso2 | 0.435 | 1.000 | +0.565 |
+| ni_cd_bulk | 0.750 | 1.000 | +0.250 |
+| ni_cd_small | 0.435 | 0.917 | +0.482 |
+| ni_mh_all | 0.080 | 0.929 | +0.849 |
+| **TOTAL recall** | **0.452** | **0.941** | **+0.489** |
+| **precision** | **0.410** | **0.927** | **+0.517** |
+
+```
+recall    0.941 = 190/202   95% CI [0.899, 0.966]
+precision 0.927 = 190/205   95% CI [0.883, 0.955]
+```
+
+The 36-frame preliminary was 0.950 / 0.923; the full 72 gives 0.941 / 0.927. The second half was
+labeled after the first was already reported and moved the result by less than the CI width, so the
+half-set result was not a lucky draw.
+
+Geometry of v1 against v3, on the 171 boxes that pair up: median IoU **0.498**, v1 boxes **6.0%
+wider** and 1.4% taller, centre displaced **dy +0.084** of a box height (v1 sits low). 15 boxes exist
+only in v1, 31 only in v3. This is the round-3 error model measured on the complete set: a modest
+downward, slightly oversized placement error, which is enough on its own to halve apparent recall.
+
+### The residual misses are an edge-of-frame convention, not imagery
+
+**3 of 202 boxes (1.5%)** are total misses at IoU < 0.1 — one each in `li_ion_mobile`,
+`ni_cd_small`, `ni_mh_all`. This is the population, and the only population, that could ever have
+justified a lighting or hardware change. All three were inspected as crops
+(`results/phase4/labelset_compare/residual_*.jpg`):
+
+| class | box | what it is |
+|---|---|---|
+| ni_cd_small | x1=0, w=20 px | a cell just entering frame — a 20 px sliver clipped at the left border |
+| ni_mh_all | x1=0, w=10 px | same, a 10 px sliver |
+| li_ion_mobile | x1=19, w=54, h=82 | a battery overlapping a neighbour — the touching-cells convention case |
+
+Two are objects the belt has not finished carrying into the field of view, and the third is a
+separation question between adjacent objects. **None is a dark object lost against a dark belt.**
+The lighting recommendation from round 1 is not merely withdrawn for lack of evidence; the
+evidence that would have supported it does not exist at any measurable level. A tracker following
+objects across frames sees both slivers fully resolved within one or two frames regardless.
+
+### What this closes, and what it leaves
+
+Closed: the recall ceiling, the imagery/contrast explanation, and the hardware ask. The detector
+that has been in the repo since 2026-06-29 was always performing at ~0.94 recall / ~0.93 precision;
+Phase 4 changed the ruler, not the model.
+
+Left open: precision is now the weaker number, at 0.927 with 15 detections unmatched against v3.
+That is the only remaining measurable headroom, and it is worth a look before any further training.
+`probe_ensemble.py` and `probe_preprocess.py` remain parked — they were built to buy recall that
+was never missing.
