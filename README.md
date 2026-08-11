@@ -18,7 +18,7 @@ with brand / part # under a battery when the OCR read one.*
 
 | phase | what | headline (honest, held-out) | findings doc |
 |---|---|---|---|
-| 1a detect | YOLO11s, YOLO-World-bootstrapped + 36 hand-labeled frames | P 0.466 · R 0.446 · mAP50 0.252 — ceiling is the **imagery** (dark belt), not labels/architecture | `docs/recall_ceiling_findings.md` |
+| 1a detect | YOLO11s, YOLO-World-bootstrapped + 36 hand-labeled frames | **R 0.941 · P 0.927** on a blank-drawn eval set. The long-reported *R 0.45* measured **label placement error**, not the model — same frozen checkpoint, corrected ruler | `docs/detector_performance_report.md` |
 | 1b track | ByteTrack over timestamp-segmented runs | stable per-battery IDs, best-conf crop per battery; 103/103 runs → 698 batteries | — |
 | 2 OCR | Qwen2.5-VL-3B on all 698 crops (classical OCR fails outright) | coverage ≠ accuracy: the VLM **prior-fills** chemistry/voltage/capacity — only brand (14%) + part # (15%) are trustworthy | `docs/ocr_findings.md` |
 | 3 classify | yolo11n-cls on crops, run-grouped holdout | **6-way type acc 0.874 · 4-way chemistry acc 0.899** (majority baseline 0.603); OCR features add zero — sorting is visual, OCR is metadata | `docs/type_classifier_findings.md` |
@@ -32,10 +32,16 @@ box (~160 px) is smaller than the belt's ~156 px/frame motion — ni_cd_small/ni
 10/12 batteries instead of 49/31 until BoT-SORT's motion compensation bridged the gap (which is
 also why the demo counts 756 batteries vs. the 698-crop Phase-2 inventory; `tasks/lessons.md`).
 
-The two project-level lessons worth carrying beyond this repo: (1) every phase hit the same
-wall — dark, low-contrast imagery; the step-change lever is belt **lighting**, not more
-labels/compute; (2) a VLM's field coverage is not accuracy — audit value *distributions*
-against known truth before trusting any extracted field.
+The two project-level lessons worth carrying beyond this repo: (1) **audit the ruler before you
+optimize against it** — three rounds of experiments here returned "no improvement" because the
+eval labels, not the imagery, were the binding error; the belt-**lighting** conclusion that
+followed from them is withdrawn (`docs/detector_performance_report.md`); (2) a VLM's field
+coverage is not accuracy — audit value *distributions* against known truth before trusting any
+extracted field.
+
+> ⚠️ Docs written before 2026-08-11 (`docs/recall_ceiling_findings.md`, `docs/recall_ceiling_round2.md`,
+> parts of `tasks/todo.md`) argue for a dark-imagery ceiling and a lighting upgrade. They are kept
+> as the record of how the error was found, but their conclusion is superseded.
 
 ## Data
 - Source: `OneDrive_1_3-7-2025.zip` (~10.7 GB), Basler acA1300-200uc, **1280×1024 color BMP**.
